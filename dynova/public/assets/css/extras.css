@@ -1,0 +1,616 @@
+/* =====================================================================
+   DYNOVA – Extensions: packages, mobile alphabetic header, brand logos
+   Loaded after style.css (via <link>) so values here override defaults.
+   ===================================================================== */
+
+/* ---------- PAGE HEAD (replaces .greet on dashboards) ---------- */
+.topbar .page-head { display: flex; flex-direction: column; }
+.page-title {
+  margin: 0; font-family: 'Outfit', 'Sora', sans-serif;
+  font-size: 22px; font-weight: 800; letter-spacing: -.4px;
+  background: linear-gradient(90deg, #fff, #b9d6ff);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.page-sub { font-size: 12px; color: var(--txt-mute); letter-spacing: .3px; }
+
+/* ---------- MOBILE ALPHABETIC HEADER (< 1024px only) ---------- */
+.mob-header {
+  display: none;
+  position: sticky; top: 0; z-index: 25;
+  align-items: center; justify-content: space-between;
+  padding: 12px 18px;
+  background: rgba(4, 7, 15, .82);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 1023px) {
+  .mob-header { display: flex; }
+  /* push the shell down a bit so it doesn't sit under the sticky header */
+  body.user-panel .shell:not(.admin) { padding-top: 10px; }
+}
+
+.mob-mark {
+  position: relative;
+  display: grid; place-items: center;
+  width: 42px; height: 42px; border-radius: 14px;
+  background: var(--grad-brand);
+  text-decoration: none;
+  box-shadow: 0 10px 24px -8px rgba(62, 182, 255, .55),
+              inset 0 1px 0 rgba(255, 255, 255, .25);
+  overflow: hidden;
+  isolation: isolate;
+  animation: markPulse 4s ease-in-out infinite;
+}
+.mob-mark::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: conic-gradient(from 0deg,
+    rgba(255, 255, 255, 0) 0deg,
+    rgba(255, 255, 255, .25) 60deg,
+    rgba(255, 255, 255, 0) 140deg);
+  animation: markSpin 5s linear infinite;
+}
+.mob-mark-glyph {
+  font-family: 'Outfit', 'Sora', sans-serif;
+  font-weight: 800; font-size: 20px; line-height: 1;
+  color: #fff; letter-spacing: -.5px;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, .25);
+}
+.mob-mark-dot {
+  position: absolute; bottom: 4px; right: 4px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 8px var(--green);
+  border: 2px solid #04070f;
+}
+@keyframes markPulse {
+  0%, 100% { box-shadow: 0 10px 24px -8px rgba(62, 182, 255, .55), inset 0 1px 0 rgba(255, 255, 255, .25); }
+  50%      { box-shadow: 0 12px 30px -6px rgba(141, 91, 255, .7),  inset 0 1px 0 rgba(255, 255, 255, .3); }
+}
+@keyframes markSpin { to { transform: rotate(360deg); } }
+
+.mob-brand {
+  display: flex; align-items: center; gap: 8px;
+  text-decoration: none; color: var(--txt);
+}
+.mob-brand img {
+  width: 26px; height: 26px; border-radius: 8px; object-fit: cover;
+  box-shadow: 0 0 10px rgba(62, 182, 255, .35);
+}
+.mob-brand-name {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800; letter-spacing: 3px; font-size: 13px;
+  background: var(--grad-brand);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+.mob-bell {
+  position: relative;
+  width: 42px; height: 42px; border-radius: 14px;
+  display: grid; place-items: center;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--line);
+  color: var(--txt); text-decoration: none;
+}
+.mob-bell .dot {
+  position: absolute; top: 9px; right: 11px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--pink); box-shadow: 0 0 8px var(--pink);
+}
+
+/* ============================================================
+   PAYMENT BRAND LOGO (white pill so coloured PNGs read clearly)
+   ============================================================ */
+.pay-brand {
+  border-radius: 14px;
+  background: #ffffff;
+  display: grid; place-items: center;
+  padding: 6px;
+  flex-shrink: 0;
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, .5);
+}
+.pay-brand img { width: 100%; height: 100%; object-fit: contain; }
+.pay-brand-lg {
+  width: 72px; height: 72px; border-radius: 18px; padding: 10px;
+  margin-bottom: 18px;
+}
+
+/* ============================================================
+   TASK PACKAGES — USER VIEW
+   ============================================================ */
+.packages-grid {
+  display: grid; gap: 16px;
+  grid-template-columns: 1fr;
+  margin-top: 18px;
+}
+@media (min-width: 720px) {
+  .packages-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 1024px) {
+  .packages-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (min-width: 1400px) {
+  .packages-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+.pkg-card {
+  position: relative;
+  padding: 22px 20px 20px;
+  border-radius: 22px;
+  background: var(--grad-card), rgba(13, 18, 40, .55);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+  transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease;
+}
+.pkg-card::before {
+  content: ""; position: absolute; inset: 0; z-index: 0; opacity: .14;
+  background: var(--pkg-grad, linear-gradient(160deg, #3eb6ff, transparent 70%));
+  pointer-events: none;
+}
+.pkg-card > * { position: relative; z-index: 1; }
+.pkg-card:hover { transform: translateY(-4px); box-shadow: 0 24px 60px -22px rgba(62, 182, 255, .35); }
+
+.pkg-card.starter   { --pkg-grad: linear-gradient(160deg, #3eb6ff, transparent 70%); border-color: rgba(62, 182, 255, .25); }
+.pkg-card.silver    { --pkg-grad: linear-gradient(160deg, #c0c0c0, transparent 70%); border-color: rgba(192, 192, 192, .30); }
+.pkg-card.gold      { --pkg-grad: linear-gradient(160deg, #ffd24a, transparent 70%); border-color: rgba(255, 210, 74, .35); }
+.pkg-card.platinum  { --pkg-grad: linear-gradient(160deg, #b9c6ff, transparent 70%); border-color: rgba(185, 198, 255, .35); }
+.pkg-card.diamond   { --pkg-grad: linear-gradient(160deg, #5bf0ff, transparent 70%); border-color: rgba(91, 240, 255, .35); }
+.pkg-card.featured  { border-color: rgba(255, 210, 74, .55); box-shadow: 0 0 40px -12px rgba(255, 210, 74, .35); }
+
+.pkg-ribbon {
+  position: absolute; top: 14px; right: -36px;
+  background: linear-gradient(135deg, #ffd24a, #ff9d4a);
+  color: #1a1300; font-weight: 800; font-size: 10.5px;
+  letter-spacing: 1px; padding: 5px 44px; transform: rotate(35deg);
+  box-shadow: 0 8px 18px -6px rgba(255, 157, 74, .6);
+}
+
+.pkg-head { display: flex; align-items: center; gap: 12px; }
+.pkg-emoji {
+  width: 50px; height: 50px; border-radius: 14px;
+  display: grid; place-items: center; font-size: 26px;
+  background: rgba(255, 255, 255, .05);
+  border: 1px solid var(--line);
+}
+.pkg-name {
+  font-family: 'Outfit', 'Sora', sans-serif;
+  font-size: 20px; font-weight: 800; letter-spacing: -.4px;
+}
+.pkg-tier { font-size: 10px; letter-spacing: 2px; color: var(--txt-mute); font-weight: 600; }
+
+.pkg-price { display: flex; align-items: baseline; gap: 6px; margin: 18px 0 14px; }
+.pkg-price .cur { font-size: 16px; color: var(--txt-mute); font-weight: 600; }
+.pkg-price .amt {
+  font-family: 'Outfit', sans-serif;
+  font-size: 38px; font-weight: 800; line-height: 1; letter-spacing: -1px;
+  background: var(--grad-brand);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.pkg-price .per { font-size: 11px; color: var(--txt-mute); margin-left: 4px; }
+
+.pkg-stats {
+  list-style: none; padding: 0; margin: 0 0 14px;
+  display: grid; grid-template-columns: 1fr; gap: 7px;
+}
+.pkg-stats li {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 12px;
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+.pkg-stats .i {
+  width: 30px; height: 30px; border-radius: 9px;
+  display: grid; place-items: center; font-size: 12px;
+  background: rgba(62, 182, 255, .12); color: var(--blue); flex-shrink: 0;
+}
+.pkg-stats .i.grad  { background: rgba(61, 220, 151, .15); color: var(--green); }
+.pkg-stats .i.grad2 { background: rgba(255, 181, 71, .15); color: var(--amber); }
+.pkg-stats li > span:last-child {
+  display: flex; flex-direction: row; align-items: baseline; justify-content: space-between;
+  flex: 1; min-width: 0; gap: 8px;
+}
+.pkg-stats b {
+  font-size: 14px; font-weight: 700;
+  white-space: nowrap;
+}
+.pkg-stats small {
+  font-size: 11px; color: var(--txt-mute);
+  white-space: nowrap; text-align: right;
+}
+
+.pkg-roi {
+  padding: 8px 12px; border-radius: 10px;
+  background: rgba(61, 220, 151, .08);
+  border: 1px dashed rgba(61, 220, 151, .35);
+  color: var(--green); font-size: 11.5px;
+  text-align: center; margin-bottom: 14px; letter-spacing: .3px;
+}
+.pkg-roi b { font-size: 15px; font-weight: 800; margin: 0 2px; }
+
+.pkg-btn { padding: 13px 16px; font-size: 13.5px; }
+.pkg-btn[disabled] {
+  background: rgba(61, 220, 151, .15); color: var(--green);
+  border: 1px solid rgba(61, 220, 151, .35); cursor: default;
+}
+
+/* ---------- ACTIVE PACKAGE BANNER (above the grid) ---------- */
+.active-pkg-card {
+  display: flex; align-items: stretch; gap: 0; padding: 0; overflow: hidden;
+  border-color: rgba(255, 210, 74, .35);
+  box-shadow: 0 0 40px -12px rgba(255, 210, 74, .25);
+}
+.active-pkg-side {
+  width: 110px; flex-shrink: 0; display: grid; place-items: center;
+  background: linear-gradient(160deg, rgba(62, 182, 255, .25), rgba(141, 91, 255, .15));
+  font-size: 50px;
+}
+.active-pkg-side.gold      { background: linear-gradient(160deg, rgba(255, 210, 74, .35), rgba(255, 157, 74, .15)); }
+.active-pkg-side.silver    { background: linear-gradient(160deg, rgba(192, 192, 192, .30), rgba(100, 100, 100, .10)); }
+.active-pkg-side.platinum  { background: linear-gradient(160deg, rgba(185, 198, 255, .30), rgba(120, 140, 220, .12)); }
+.active-pkg-side.diamond   { background: linear-gradient(160deg, rgba(91, 240, 255, .30), rgba(40, 120, 180, .12)); }
+.active-pkg-body { padding: 18px 22px; flex: 1; }
+.active-pkg-meta {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  font-size: 12.5px; color: var(--txt-mute);
+}
+.active-pkg-meta i { color: var(--blue); margin-right: 5px; }
+
+/* ---------- topbar / page-head responsive tweak ---------- */
+.topbar-flex { display: flex; align-items: center; justify-content: space-between; }
+
+/* 5-cell mobile bottom nav cells get a touch tighter so 5 fit on small phones */
+@media (max-width: 380px) {
+  .nav-bottom a { font-size: 10px; padding: 6px 2px; }
+  .nav-bottom a i { font-size: 16px; }
+}
+
+/* Hide the topbar bell on mobile — the sticky .mob-header already provides one */
+@media (max-width: 1023px) {
+  .topbar .bell { display: none; }
+  .topbar .page-head { padding-left: 2px; }
+}
+
+/* ============ Dashboard referral-link card ============ */
+.ref-link-card{
+  padding:16px 18px;
+  background:linear-gradient(135deg, rgba(62,182,255,.10), rgba(141,91,255,.10));
+  border:1px solid rgba(141,91,255,.22);
+}
+.ref-link-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.ref-link-icon{
+  width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
+  background:rgba(62,182,255,.18);color:#60a5fa;font-size:16px;flex-shrink:0;
+}
+.ref-link-title{font-weight:700;font-size:14.5px;color:var(--txt,#fff)}
+.ref-link-sub{font-size:11.5px;color:var(--txt-mute,#9aa3b8);margin-top:2px;line-height:1.4}
+.ref-link-row{display:flex;gap:8px;align-items:stretch}
+.ref-link-input{
+  flex:1;min-width:0;background:rgba(0,0,0,.35);border:1px solid var(--line);
+  border-radius:12px;padding:11px 12px;color:var(--txt,#fff);font-size:12.5px;
+  font-family:inherit;outline:none;
+}
+.ref-link-input:focus{border-color:var(--blue,#3eb6ff)}
+.ref-link-btn{
+  display:flex;align-items:center;gap:6px;padding:0 14px;border:0;cursor:pointer;
+  border-radius:12px;color:#fff;font-weight:700;font-size:12.5px;letter-spacing:.3px;
+  background:var(--grad-brand, linear-gradient(120deg,#3eb6ff,#8d5bff));
+  transition:transform .15s ease, filter .15s ease;
+}
+.ref-link-btn:hover{filter:brightness(1.08)}
+.ref-link-btn:active{transform:scale(.96)}
+.ref-link-foot{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  margin-top:10px;font-size:11.5px;color:var(--txt-mute,#9aa3b8);flex-wrap:wrap;
+}
+.ref-link-foot a{color:var(--blue,#3eb6ff);text-decoration:none;font-weight:600}
+.ref-link-foot a:hover{text-decoration:underline}
+
+/* ============ Bottom-nav: 5 items incl. "More" button ============ */
+.nav-bottom{grid-template-columns:repeat(5,1fr) !important}
+.nav-more-btn{
+  background:transparent;border:0;cursor:pointer;font-family:inherit;
+  color:var(--txt-mute);text-align:center;padding:8px 4px;border-radius:14px;
+  font-size:10.5px;letter-spacing:.3px;font-weight:500;
+  display:flex;flex-direction:column;align-items:center;gap:3px;transition:.25s;
+}
+.nav-more-btn i{font-size:18px}
+.nav-more-btn:hover{color:#fff}
+.nav-more-btn.active,
+.nav-more-btn.is-open{
+  color:#fff;background:var(--grad-brand, linear-gradient(120deg,#3eb6ff,#8d5bff));
+  box-shadow:0 8px 22px -8px rgba(62,182,255,.7);
+}
+
+/* ============ More drop-up sheet (mobile) ============ */
+.more-backdrop{
+  position:fixed;inset:0;background:rgba(4,7,15,.55);backdrop-filter:blur(4px);
+  z-index:25;opacity:0;pointer-events:none;transition:opacity .25s ease;
+}
+.more-backdrop.is-open{opacity:1;pointer-events:auto}
+.more-sheet{
+  position:fixed;left:50%;transform:translate(-50%, 110%);
+  bottom:calc(14px + 72px); /* sit above the floating bottom nav */
+  width:min(460px,calc(100% - 28px));
+  background:rgba(10,16,40,.92);backdrop-filter:blur(20px);
+  border:1px solid var(--line);border-radius:22px;
+  padding:14px 14px 18px;z-index:26;
+  box-shadow:0 26px 70px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+  transition:transform .32s cubic-bezier(.2,.9,.25,1.2), opacity .25s ease;
+  opacity:0;pointer-events:none;
+}
+.more-sheet.is-open{transform:translate(-50%, 0);opacity:1;pointer-events:auto}
+.more-sheet-handle{
+  width:42px;height:4px;border-radius:3px;background:rgba(255,255,255,.18);
+  margin:0 auto 10px;
+}
+.more-sheet-head{
+  display:flex;justify-content:space-between;align-items:flex-start;
+  padding:0 4px 12px;border-bottom:1px solid var(--line);margin-bottom:12px;
+}
+.more-close{
+  background:rgba(255,255,255,.06);border:0;color:var(--txt-mute);
+  width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:14px;
+  display:grid;place-items:center;transition:.2s;
+}
+.more-close:hover{color:#fff;background:rgba(255,255,255,.12)}
+.more-grid{
+  display:grid;grid-template-columns:repeat(4, 1fr);gap:10px;
+}
+@media (max-width:380px){
+  .more-grid{grid-template-columns:repeat(3, 1fr)}
+}
+.more-item{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:12px 6px;border-radius:14px;text-decoration:none;
+  color:var(--txt,#fff);background:rgba(255,255,255,.03);
+  border:1px solid transparent;transition:.2s;
+}
+.more-item:hover{background:rgba(255,255,255,.06);transform:translateY(-2px)}
+.more-item.is-active{border-color:rgba(141,91,255,.4);background:rgba(141,91,255,.10)}
+.more-item-danger{color:#ff8a95}
+.mi-icon{
+  width:42px;height:42px;border-radius:13px;display:grid;place-items:center;
+  font-size:16px;
+}
+.mi-label{font-size:11.5px;font-weight:600;text-align:center;letter-spacing:.2px}
+
+/* Don't show the drop-up shell on desktop (sidebar is used instead) */
+@media (min-width:1024px){
+  .nav-more-btn, .more-sheet, .more-backdrop{display:none !important}
+}
+
+/* ============ Dark-theme <select> dropdown options ============ */
+/* By default the OS renders <option> in light theme — illegible on dark UI.
+   Force a dark background + light text on every dropdown the app uses. */
+select.input,
+select.input option,
+select.input optgroup,
+.card select,
+.card select option {
+  background-color: #0b1224 !important;
+  color: #ffffff !important;
+}
+select.input option:checked,
+select.input option:hover,
+.card select option:checked,
+.card select option:hover {
+  background: linear-gradient(120deg,#3eb6ff,#8d5bff) !important;
+  color: #ffffff !important;
+}
+/* Firefox-specific tweak */
+@-moz-document url-prefix() {
+  select.input option { background-color:#0b1224; color:#fff; }
+}
+
+/* ============ Developer hub & dev nav-link styles ============ */
+.dev-nav-link{position:relative}
+.dev-nav-dot{
+  position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  width:8px;height:8px;border-radius:50%;background:#10b981;
+  box-shadow:0 0 0 3px rgba(16,185,129,.22);
+}
+.dev-hub-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.dev-hub-card{
+  display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;
+  padding:16px 18px;border-radius:16px;text-decoration:none;color:var(--txt,#fff);
+  background:rgba(255,255,255,.03);border:1px solid var(--line);
+  transition:.25s ease;
+}
+.dev-hub-card:hover{
+  background:rgba(255,255,255,.06); transform:translateY(-2px);
+  border-color:rgba(141,91,255,.35);
+  box-shadow:0 18px 36px -22px rgba(141,91,255,.7);
+}
+.dev-hub-ic{
+  width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:20px;
+}
+.dev-hub-title{font-size:16px;font-weight:800;letter-spacing:.3px;margin-bottom:3px}
+.dev-hub-desc{font-size:12.5px;color:var(--txt-mute,#9aa3b8);line-height:1.55}
+.dev-hub-chev{color:var(--txt-mute,#9aa3b8);font-size:14px;transition:.25s}
+.dev-hub-card:hover .dev-hub-chev{color:#fff;transform:translateX(4px)}
+
+/* Hide the old "is-locked / is-dev-locked" blur overlay if any view still uses it */
+.is-dev-locked form::after{display:none !important}
+.is-dev-locked form input,
+.is-dev-locked form select,
+.is-dev-locked form textarea,
+.is-dev-locked form button{opacity:1 !important;cursor:auto !important}
+
+
+/* ============ Admin package live earning preview ============ */
+.pkg-calc-tile{
+  background:linear-gradient(135deg, rgba(62,182,255,.08), rgba(141,91,255,.10));
+  border:1px solid rgba(141,91,255,.22);
+  border-radius:14px; padding:12px 14px;
+}
+.pkg-calc-k{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--txt-mute,#9aa3b8)}
+.pkg-calc-v{font-size:18px;font-weight:800;margin-top:4px;color:var(--txt,#fff)}
+@media (max-width:560px){
+  .pkg-calc-preview{grid-template-columns:1fr 1fr 1fr !important}
+  .pkg-calc-v{font-size:15px}
+}
+
+/* Bank payment-method logo (Font-Awesome icon pill) */
+.pm-logo-bank{
+  display:grid !important; place-items:center !important;
+  background:linear-gradient(135deg, rgba(16,185,129,.18), rgba(62,182,255,.18)) !important;
+  color:#10b981 !important; border:1px solid rgba(16,185,129,.28) !important;
+  border-radius:13px !important;
+}
+.pm-logo-bank i{font-size:inherit}
+
+/* ============ Mobile optimization (≤480px) ============ */
+@media (max-width: 480px) {
+  /* Tighter shell padding so cards have more screen width */
+  .shell { padding: 12px 12px 90px !important; }
+
+  /* Headings & subtitles */
+  .page-title { font-size: 22px !important; line-height: 1.2 !important; }
+  .page-sub   { font-size: 12px !important; }
+  .topbar     { padding: 6px 0 10px !important; gap: 10px !important; flex-wrap: wrap !important; }
+  .topbar-flex{ align-items: flex-start !important; }
+  .greet b    { font-size: 15px !important; }
+
+  /* Cards: less padding, less radius shock */
+  .card { padding: 14px 14px !important; border-radius: 16px !important; }
+
+  /* Balance amount: shrink so it never overflows */
+  .balance-amount { font-size: 30px !important; word-break: break-word; }
+  .balance-card   { padding: 16px 16px !important; }
+
+  /* Stat grid → always 2 columns instead of 4 */
+  .stat-grid { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+  .stat .val { font-size: 16px !important; }
+  .stat .lbl { font-size: 10.5px !important; }
+
+  /* Buttons: stretchier hit-targets */
+  .btn { padding: 13px 16px !important; font-size: 14px !important; }
+  .btn.inline { padding: 9px 14px !important; }
+
+  /* Tables wrap to horizontal scroll instead of breaking layout */
+  .table { font-size: 12px !important; min-width: 480px; }
+  .card > div[style*="overflow-x"]{ -webkit-overflow-scrolling: touch; }
+
+  /* Referral / package grids stack to single column */
+  .ref-link-row { flex-direction: column !important; gap: 8px !important; }
+  .ref-link-btn { width: 100% !important; justify-content: center !important; }
+  .ref-link-input { width: 100% !important; }
+  .packages-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
+  .pkg-card     { padding: 16px !important; }
+
+  /* Withdraw ladder rungs */
+  .wd-rung { grid-template-columns: 28px 1fr auto !important; gap: 8px !important; padding: 9px 10px !important; }
+  .wd-rung-num { width: 26px; height: 26px; font-size: 12px; }
+  .wd-rung-label { font-size: 11.5px !important; }
+  .wd-rung-amt   { font-size: 13px !important; }
+
+  /* Developer hub cards: comfortable single column */
+  .dev-hub-grid { grid-template-columns: 1fr !important; }
+  .dev-hub-card { padding: 14px !important; gap: 10px !important; }
+  .dev-hub-title { font-size: 14.5px !important; }
+  .dev-hub-desc  { font-size: 11.5px !important; }
+
+  /* Forms: full-width inputs */
+  .form-group { margin-bottom: 12px !important; }
+  .input { padding: 11px 12px !important; font-size: 14px !important; }
+  .admin-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
+
+  /* Bottom-nav: snug labels so all 5 cells stay on one line */
+  .nav-bottom a, .nav-more-btn { font-size: 10px !important; }
+  .nav-bottom a i, .nav-more-btn i { font-size: 17px !important; }
+
+  /* Activity rows */
+  .activity { padding: 10px 12px !important; gap: 10px !important; }
+  .activity .meta b { font-size: 13px !important; }
+  .activity .meta small { font-size: 11px !important; }
+
+  /* Pay-method radio cards */
+  .pm-grid { grid-template-columns: 1fr !important; gap: 8px !important; }
+}
+
+/* Even smaller phones (≤360px) */
+@media (max-width: 360px) {
+  .stat-grid { grid-template-columns: 1fr !important; }
+  .balance-amount { font-size: 26px !important; }
+  .page-title { font-size: 20px !important; }
+  .nav-bottom a, .nav-more-btn { font-size: 9.5px !important; padding: 6px 2px !important; }
+}
+
+/* Lock viewport zoom level — prevents iOS auto-zoom on focused inputs */
+@media (max-width: 480px) {
+  input.input, select.input, textarea.input { font-size: 16px !important; }
+}
+
+/* ============ Dashboard CTA card (no-package banner) ============ */
+.pkg-cta-card{
+  display:grid;
+  grid-template-columns:48px 1fr auto;
+  grid-template-areas:"icon body button";
+  align-items:center;
+  gap:14px;
+  padding:16px 18px !important;
+  margin-bottom:14px !important;
+  background:linear-gradient(135deg, rgba(255,181,71,.10), rgba(141,91,255,.12)) !important;
+  border-color:rgba(255,181,71,.30) !important;
+}
+.pkg-cta-icon{
+  grid-area:icon;
+  width:46px;height:46px;border-radius:13px;display:grid;place-items:center;
+  background:rgba(255,181,71,.18);color:#ffb547;font-size:18px;
+}
+.pkg-cta-body{grid-area:body;min-width:0}
+.pkg-cta-title{font-weight:700;font-size:15px;margin-bottom:3px;line-height:1.3}
+.pkg-cta-desc{font-size:12.5px;color:var(--txt-mute,#9aa3b8);line-height:1.55}
+.pkg-cta-btn{
+  grid-area:button;
+  white-space:nowrap;
+  padding:10px 18px !important;
+  font-size:13px !important;
+  width:auto !important;
+}
+/* Below 640px → icon + body on row 1, button full-width on row 2 */
+@media (max-width:640px){
+  .pkg-cta-card{
+    grid-template-columns:46px 1fr;
+    grid-template-areas:
+      "icon body"
+      "button button";
+    gap:12px 12px;
+  }
+  .pkg-cta-btn{width:100% !important; justify-content:center; padding:12px 18px !important}
+  .pkg-cta-title{font-size:14.5px}
+  .pkg-cta-desc{font-size:12px}
+}
+
+/* ============ Dashboard mobile polish ============ */
+@media (max-width:480px){
+  /* Stat tiles: switch to compact horizontal layout (icon | label+value) */
+  .stat-grid{ grid-template-columns:1fr 1fr !important; gap:8px !important }
+  .stat{
+    padding:11px 12px !important;
+    display:flex !important;
+    align-items:center !important;
+    gap:10px !important;
+    min-height:60px;
+  }
+  .stat .ico{
+    width:34px !important;height:34px !important;margin-bottom:0 !important;
+    font-size:14px !important;flex-shrink:0;
+  }
+  .stat .lbl{font-size:9.5px !important;letter-spacing:.6px !important;line-height:1.2}
+  .stat .val{font-size:14px !important;margin-top:1px !important;line-height:1.2}
+  .stat > div:not(.ico){min-width:0;flex:1}
+
+  /* Quick-actions (Deposit / Withdraw): keep 2 cols but narrower paddings */
+  .actions{ grid-template-columns:1fr 1fr !important; gap:10px !important }
+  .action{ padding:14px !important }
+  .action h4{font-size:14px !important}
+  .action small{font-size:11px !important}
+
+  /* Topbar: keep notifications icon on the right, title beside */
+  .topbar{ align-items:center !important; gap:10px !important }
+  .topbar .greet b, .page-title{ font-size:20px !important }
+
+  /* Recent Activity list */
+  .list-title h3{font-size:14px !important}
+}

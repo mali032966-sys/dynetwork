@@ -1,0 +1,22 @@
+{
+    "name": "dynova/network",
+    "description": "DYNOVA NETWORK – video-rating earning platform with referral system, ranks and PKR payouts.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.0",
+        "peppeocchi/php-cron-scheduler": "^4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Dynova\\": "app/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    },
+    "scripts": {
+        "scheduler": "php scheduler.php"
+    }
+}

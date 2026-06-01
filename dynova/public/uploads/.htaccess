@@ -1,0 +1,5 @@
+# Disallow any PHP execution inside uploads/
+<FilesMatch "\.(?i:php|phtml|phar|pl|py|cgi)$">
+  Require all denied
+</FilesMatch>
+Options -ExecCGI -Indexes

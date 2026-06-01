@@ -1,0 +1,4 @@
+# Deny everything outside public/
+<Files "*">
+  Require all denied
+</Files>

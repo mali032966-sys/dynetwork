@@ -1,0 +1,32 @@
+# =====================================================================
+#  DYNOVA NETWORK – Root .htaccess for shared hosting (Hostinger / cPanel)
+# =====================================================================
+#  Upload the WHOLE `dynova/` folder into `public_html/` (or place it under
+#  a subdomain's docroot). This file tells Apache to serve every request
+#  out of the `public/` subfolder while keeping `app/`, `cron/`, `sql/`,
+#  `logs/`, `scheduler.php`, etc. completely hidden from the web.
+# =====================================================================
+
+Options -Indexes
+
+# ---------- Block direct access to sensitive folders / files ----------
+RedirectMatch 403 ^/app(/|$)
+RedirectMatch 403 ^/cron(/|$)
+RedirectMatch 403 ^/sql(/|$)
+RedirectMatch 403 ^/logs(/|$)
+RedirectMatch 403 ^/vendor(/|$)
+RedirectMatch 403 ^/composer\.(json|lock)$
+RedirectMatch 403 ^/scheduler\.php$
+RedirectMatch 403 ^/(README|INSTALL|DEPLOY|HOSTINGER_DEPLOY|CHANGELOG)\.md$
+RedirectMatch 403 ^/\.(git|env|gitignore|gitconfig|gitattributes)$
+
+# ---------- Send everything else into public/ ----------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Don't loop: once we are already inside public/ we stop.
+  RewriteCond %{REQUEST_URI} !^/public/
+
+  # Internal rewrite – the browser URL stays clean; Apache serves from public/.
+  RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>

@@ -1,0 +1,17 @@
+# Block direct access to PHP files inside subfolders for safety
+Options -Indexes
+
+# Front-controller: route everything that's not a real file/dir to index.php
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>
+
+# Block direct PHP execution inside uploads/
+<Directory "uploads">
+  <FilesMatch "\.(?i:php|phtml|phar)$">
+    Require all denied
+  </FilesMatch>
+</Directory>
