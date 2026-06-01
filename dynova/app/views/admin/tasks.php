@@ -20,12 +20,13 @@
 <div class="card">
   <h3 style="margin:0 0 12px">All Tasks (<?= count($tasks) ?>)</h3>
   <table class="table" data-testid="admin-tasks-table">
-    <thead><tr><th>ID</th><th>Title</th><th>Status</th><th>URL</th><th>Actions</th></tr></thead>
+    <thead><tr><th>#</th><th>DB&nbsp;ID</th><th>Title</th><th>Status</th><th>URL</th><th>Actions</th></tr></thead>
     <tbody>
-    <?php if (!$tasks): ?><tr><td colspan="5" class="empty">No tasks yet</td></tr>
-    <?php else: foreach ($tasks as $t): ?>
+    <?php if (!$tasks): ?><tr><td colspan="6" class="empty">No tasks yet</td></tr>
+    <?php else: $n = 0; foreach ($tasks as $t): $n++; ?>
       <tr>
-        <td>#<?= (int)$t['id'] ?></td>
+        <td><b>#<?= $n ?></b></td>
+        <td class="small muted">#<?= (int)$t['id'] ?></td>
         <td><?= e($t['title']) ?></td>
         <td><?php if ($t['is_active']): ?><span class="badge approved">Active</span><?php else: ?><span class="badge rejected">Off</span><?php endif; ?></td>
         <td><a href="<?= e($t['video_url']) ?>" target="_blank" style="color:var(--blue);font-size:11px">↗ view</a></td>
