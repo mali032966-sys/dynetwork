@@ -119,15 +119,25 @@ class WalletController {
 
     public function withdraw(): void {
         $u = require_user();
+        // Always re-fetch the user so $u['balance'] reflects the latest value
+        // (a fresh page load right after a prior withdrawal must show the
+        // current balance, not the stale session copy).
+        $fresh = User::find((int)$u['id']);
+        if ($fresh) { $u = array_merge($u, $fresh); }
+
         $methods = PaymentMethod::active();
 
         // Fixed-slab withdrawals. The list of allowed slabs comes from the
         // user's active package (`min_withdrawal_ladder`) – or the system
-        // default if they have no active package. Users pick exactly one
-        // slab per request via one-click cards on the form, every time.
+        // default if they have no active package.
+        //
+        // NEW RULE (per product owner):  No per-tier lock, no ladder
+        // progression. ANY slab can be withdrawn AS MANY TIMES AS the user
+        // wants, the only restriction is that the user must have enough
+        // withdrawable balance to cover the chosen slab amount.
         $ladderInfo = TaskPackage::withdrawalLadderFor((int)$u['id']);
         $slabs      = $ladderInfo['ladder'];          // ordered int[] e.g. [1500,7000,15000,...]
-        $minSlab    = $slabs ? (float)$slabs[0] : 0.0; // absolute floor for any withdrawal
+        $minSlab    = $slabs ? (float)$slabs[0] : 0.0;
 
         $errors = [];
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -142,6 +152,9 @@ class WalletController {
             if (!in_array((int)$amount, $allowed, true)) {
                 $errors[] = 'Please pick one of the allowed withdrawal amounts.';
             }
+            // The ONLY balance rule: user must have at least the selected
+            // amount in withdrawable balance. Same amount may be requested
+            // again and again as long as this is true.
             if ($amount > (float)$u['balance']) {
                 $errors[] = 'Insufficient balance for the selected amount.';
             }
