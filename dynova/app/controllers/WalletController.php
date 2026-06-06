@@ -35,14 +35,43 @@ class WalletController {
             }
 
             if ($step === 1 && $action === 'next') {
-                $amount = (float)($_POST['amount'] ?? 0);
-                $method = trim($_POST['method'] ?? '');
+                $amount   = (float)($_POST['amount'] ?? 0);
+                // The form now submits the PRIMARY KEY of the payment method
+                // (input name="method_id"). The previous name-based field
+                // ("method") is still accepted for backward compatibility
+                // with already-cached pages.
+                $methodId = (int)($_POST['method_id'] ?? 0);
+                $methodNameRaw = trim($_POST['method'] ?? '');
+
+                // Resolve the chosen method server-side so we never trust the
+                // client's name string. If method_id is provided, look it up;
+                // otherwise try to resolve by case-insensitive name match
+                // against the current list of ACTIVE methods.
+                $chosen = null;
+                if ($methodId > 0) {
+                    foreach ($methods as $m) {
+                        if ((int)$m['id'] === $methodId) { $chosen = $m; break; }
+                    }
+                }
+                if (!$chosen && $methodNameRaw !== '') {
+                    foreach ($methods as $m) {
+                        if (strcasecmp($m['name'], $methodNameRaw) === 0) {
+                            $chosen = $m; break;
+                        }
+                    }
+                }
+
                 if ($amount < 100)  $errors[] = 'Minimum deposit is Rs 100.';
-                if (!$method)       $errors[] = 'Please select a payment method.';
+                if (!$chosen)       $errors[] = 'Please select a payment method.';
+
                 if (!$errors) {
                     $_SESSION['dep_wizard'] = [
-                        'amount' => $amount,
-                        'method' => $method,
+                        'amount'    => $amount,
+                        // Persist BOTH the id and the display name so step 2
+                        // can always find the row even if admin later edits
+                        // or renames the method.
+                        'method_id' => (int)$chosen['id'],
+                        'method'    => $chosen['name'],
                     ];
                     redirect('wallet/deposit', ['step' => 2]);
                 }
@@ -105,11 +134,28 @@ class WalletController {
             redirect('wallet/deposit', ['step' => 1]);
         }
 
-        // Look up the selected method for steps 2/3
+        // Look up the selected method for steps 2/3.  We prefer the stored
+        // method_id (stable across renames / re-orders); fall back to a
+        // case-insensitive name match for legacy wizard rows.
         $selected = null;
-        if (!empty($wizard['method'])) {
+        $wizardId = (int)($wizard['method_id'] ?? 0);
+        if ($wizardId > 0) {
+            // Use ::find() so the method is found even if it was just
+            // deactivated, but we still gate on "active" below for safety.
+            $row = PaymentMethod::find($wizardId);
+            if ($row && (int)$row['is_active'] === 1) {
+                $selected = $row;
+            }
+        }
+        if (!$selected && !empty($wizard['method'])) {
             foreach ($methods as $m) {
-                if ($m['name'] === $wizard['method']) { $selected = $m; break; }
+                if (strcasecmp($m['name'], $wizard['method']) === 0) {
+                    $selected = $m;
+                    // Heal the wizard so subsequent steps use the id.
+                    $_SESSION['dep_wizard']['method_id'] = (int)$m['id'];
+                    $_SESSION['dep_wizard']['method']    = $m['name'];
+                    break;
+                }
             }
         }
 

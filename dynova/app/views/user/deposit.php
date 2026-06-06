@@ -45,15 +45,29 @@
         <?php if (!$methods): ?>
           <div class="muted small">No active payment methods. Contact support.</div>
         <?php else: foreach ($methods as $m):
-          $checked = (($wizard['method'] ?? '') === $m['name']) ? 'checked' : '';
+          // Match by method ID (stable across admin renames). Fall back to
+          // case-insensitive name match for legacy wizard rows.
+          $wid     = (int)($wizard['method_id'] ?? 0);
+          $isMatch = $wid > 0
+              ? ((int)$m['id'] === $wid)
+              : (strcasecmp($m['name'], (string)($wizard['method'] ?? '')) === 0);
+          $checked = $isMatch ? 'checked' : '';
+          // Mask the long account number in the card preview so it stays
+          // readable while still hinting WHICH account this is when admin
+          // adds multiple JazzCash / EasyPaisa entries.
+          $acct    = (string)($m['account_number'] ?? '');
+          $tail    = $acct !== '' ? '••••' . substr($acct, -4) : '';
         ?>
-          <label class="pm-card" data-testid="pm-radio-<?= e($m['name']) ?>">
-            <input type="radio" name="method" value="<?= e($m['name']) ?>" <?= $checked ?> required>
+          <label class="pm-card" data-testid="pm-radio-<?= (int)$m['id'] ?>">
+            <input type="radio" name="method_id" value="<?= (int)$m['id'] ?>" <?= $checked ?> required>
             <div class="pm-card-inner">
               <?= payment_logo_html($m['name'], 'md') ?>
               <div>
                 <b><?= e($m['name']) ?></b>
-                <div class="small muted">Tap to select</div>
+                <div class="small muted">
+                  <?= e($m['account_title'] ?: 'Tap to select') ?>
+                  <?php if ($tail !== ''): ?> · <?= e($tail) ?><?php endif; ?>
+                </div>
               </div>
               <div class="pm-check"><i class="fa-solid fa-circle-check"></i></div>
             </div>
