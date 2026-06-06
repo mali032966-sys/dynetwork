@@ -256,15 +256,43 @@ class AdminController {
     // -------------------------------------------------- REFERRAL TREE
     public function referrals(): void {
         require_admin();
-        $id = (int)($_GET['user_id'] ?? 0);
-        $user = $id ? User::find($id) : null;
+
+        // Accept any of:  ?q=<id|mobile|code>   (preferred, single box)
+        // or the legacy   ?user_id=<id>         (kept for old links).
+        $q   = trim((string)($_GET['q']       ?? $_GET['user_id'] ?? ''));
+        $err = null;
+        $user = null;
+
+        if ($q !== '') {
+            // 1) Numeric -> internal user id
+            if (ctype_digit($q) && strlen($q) <= 11) {
+                $user = User::find((int)$q);
+            }
+            // 2) Looks like a mobile number (10-15 digits, optional + prefix)
+            if (!$user) {
+                $waNorm = preg_replace('/\D+/', '', $q) ?? '';
+                if (strlen($waNorm) >= 10 && strlen($waNorm) <= 15) {
+                    // try a few common formattings (raw, with +)
+                    $user = User::findByWhatsapp($waNorm)
+                         ?: User::findByWhatsapp('+' . $waNorm);
+                }
+            }
+            // 3) Treat as a referral code (e.g. "DN2345672AD") — case-insensitive
+            if (!$user) {
+                $user = User::findByReferralCode(strtoupper($q));
+            }
+            if (!$user) {
+                $err = 'No user found for "' . $q . '". Try a different ID, mobile number, or referral code.';
+            }
+        }
+
         $teamA = $teamB = $teamC = [];
         if ($user) {
-            $teamA = Referral::levelMembers($id, 1);
-            $teamB = Referral::levelMembers($id, 2);
-            $teamC = Referral::levelMembers($id, 3);
+            $teamA = Referral::levelMembers((int)$user['id'], 1);
+            $teamB = Referral::levelMembers((int)$user['id'], 2);
+            $teamC = Referral::levelMembers((int)$user['id'], 3);
         }
-        view('admin/referrals', compact('user','teamA','teamB','teamC'), 'admin');
+        view('admin/referrals', compact('user','teamA','teamB','teamC','q','err'), 'admin');
     }
 
     // -------------------------------------------------- SETTINGS
