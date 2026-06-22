@@ -139,6 +139,35 @@ $initial = $src !== '' ? strtoupper(mb_substr($src, 0, 1, 'UTF-8')) : '·';
 
 <?php
 // =========================================================
+// Maintenance banner — visible only when the dev-only
+// "System Lock" toggle is ON.
+// =========================================================
+if (setting('lock_user_actions') === '1' && current_user()):
+?>
+<div class="sys-lock-banner" data-testid="sys-lock-banner" role="status">
+  <i class="fa-solid fa-triangle-exclamation"></i>
+  <span><b>Platform under maintenance.</b> Deposits, withdrawals, tasks and other actions are temporarily paused. You can still view your dashboard.</span>
+</div>
+<style>
+.sys-lock-banner{
+  position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
+  z-index:999; max-width:calc(100vw - 24px);
+  display:flex; align-items:center; gap:10px;
+  padding:10px 16px; border-radius:999px;
+  background:linear-gradient(120deg, rgba(255,91,106,.94), rgba(255,128,80,.94));
+  color:#fff; font-size:12.5px; line-height:1.45; font-weight:600;
+  box-shadow:0 14px 38px -10px rgba(255,91,106,.55);
+  border:1px solid rgba(255,255,255,.18);
+}
+.sys-lock-banner i{ font-size:14px; flex-shrink:0; }
+@media (max-width:520px){
+  .sys-lock-banner{ font-size:11.5px; padding:8px 14px; bottom:10px; }
+}
+</style>
+<?php endif; ?>
+
+<?php
+// =========================================================
 // Site-wide popup announcement (admin → Developer → Popups)
 // =========================================================
 $__popup = class_exists('Popup') ? Popup::activeForView() : null;

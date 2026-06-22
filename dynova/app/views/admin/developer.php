@@ -100,3 +100,81 @@ $sections = [
     </a>
   <?php endforeach; ?>
 </div>
+
+<?php
+// =========================================================================
+// SYSTEM LOCK — kill-switch for every user-side action.
+// =========================================================================
+$__locked = setting('lock_user_actions') === '1';
+?>
+<div class="card sys-lock-card <?= $__locked ? 'is-locked' : '' ?>" data-testid="sys-lock-card"
+     style="margin-top:18px;padding:18px;border-radius:18px;
+            border:1px solid <?= $__locked ? 'rgba(255,91,106,.45)' : 'rgba(255,181,71,.30)' ?>;
+            background:linear-gradient(135deg,
+              <?= $__locked ? 'rgba(255,91,106,.10), rgba(255,181,71,.05)' : 'rgba(255,181,71,.07), rgba(141,91,255,.05)' ?>);">
+  <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+    <div style="width:46px;height:46px;border-radius:13px;display:grid;place-items:center;flex-shrink:0;
+                background:<?= $__locked ? 'rgba(255,91,106,.18)' : 'rgba(255,181,71,.18)' ?>;
+                color:<?= $__locked ? '#ff5b6a' : '#ffb547' ?>;font-size:20px">
+      <i class="fa-solid <?= $__locked ? 'fa-lock' : 'fa-power-off' ?>"></i>
+    </div>
+    <div style="flex:1;min-width:240px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="font-weight:800;font-size:16px">System Lock</div>
+        <?php if ($__locked): ?>
+          <span class="badge rejected" style="font-size:10.5px" data-testid="sys-lock-state">LOCKED · users read-only</span>
+        <?php else: ?>
+          <span class="badge approved" style="font-size:10.5px" data-testid="sys-lock-state">LIVE · all actions enabled</span>
+        <?php endif; ?>
+      </div>
+      <div class="small muted" style="line-height:1.6;margin-top:6px">
+        Master kill-switch for every user-side action: <b>deposits</b>, <b>withdrawals</b>, <b>rating tasks</b>,
+        <b>activating packages</b>, <b>new signups</b>, and <b>profile updates</b>.
+        Users can still <b>sign in</b> and <b>browse their dashboard</b> — they just can't submit anything while this is on.
+        Admin and Developer functions are <b>never</b> affected.
+      </div>
+    </div>
+    <form method="post" action="<?= route_url('admin/system-lock') ?>" data-testid="sys-lock-form"
+          style="flex-shrink:0">
+      <?= csrf_field() ?>
+      <button type="submit" class="sys-lock-switch <?= $__locked ? 'on' : '' ?>"
+              data-testid="sys-lock-toggle"
+              title="<?= $__locked ? 'Click to UNLOCK user actions' : 'Click to LOCK all user actions' ?>">
+        <span class="sys-lock-knob"><i class="fa-solid <?= $__locked ? 'fa-lock' : 'fa-check' ?>"></i></span>
+        <span class="sys-lock-text"><?= $__locked ? 'LOCKED' : 'LIVE' ?></span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<style>
+.sys-lock-switch{
+  position:relative; display:inline-flex; align-items:center; gap:10px;
+  padding:6px 18px 6px 6px; border-radius:999px;
+  border:1px solid rgba(16,185,129,.45);
+  background:linear-gradient(120deg, rgba(16,185,129,.18), rgba(62,182,255,.10));
+  color:#10b981; font-weight:800; font-size:13px; letter-spacing:.6px;
+  cursor:pointer; transition:all .2s ease; min-width:130px; justify-content:flex-start;
+}
+.sys-lock-switch:hover{ transform:translateY(-1px); box-shadow:0 10px 22px -10px rgba(16,185,129,.55); }
+.sys-lock-knob{
+  width:30px; height:30px; border-radius:50%;
+  background:#10b981; color:#08111a;
+  display:grid; place-items:center; font-size:13px;
+  box-shadow:0 0 0 4px rgba(16,185,129,.15);
+  transition:all .2s ease;
+}
+.sys-lock-switch.on{
+  border-color:rgba(255,91,106,.55);
+  background:linear-gradient(120deg, rgba(255,91,106,.18), rgba(255,181,71,.10));
+  color:#ff5b6a; justify-content:flex-end; padding:6px 6px 6px 18px;
+}
+.sys-lock-switch.on .sys-lock-knob{
+  background:#ff5b6a; color:#08111a; order:2;
+  box-shadow:0 0 0 4px rgba(255,91,106,.18);
+}
+.sys-lock-switch.on .sys-lock-text{ order:1; }
+@media (max-width:520px){
+  .sys-lock-switch{ width:100%; }
+}
+</style>

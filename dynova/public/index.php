@@ -10,13 +10,38 @@ $route = trim($route, '/');
 // CSRF for all POSTs
 csrf_check();
 
+// =========================================================================
+// SYSTEM LOCK  (Developer -> System Lock toggle)
+// When `lock_user_actions = 1` we block every user-side action POST but
+// keep read-only browsing (dashboard, profile view, ranks, referrals,
+// bonuses, wallet balance, deposit/withdraw pages — they just can't be
+// submitted). Admin routes are NEVER blocked.
+// =========================================================================
+$isAdmin = str_starts_with($route, 'admin/') || $route === 'admin';
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && !$isAdmin
+    && setting('lock_user_actions') === '1') {
+
+    $lockedActions = [
+        'auth/signup',
+        'tasks/submit',
+        'wallet/deposit',
+        'wallet/withdraw',
+        'packages',
+        'profile',
+        'profile/password',
+    ];
+    if (in_array($route, $lockedActions, true)) {
+        flash_set('error', 'The platform is under maintenance. User actions are temporarily disabled — please try again later.');
+        redirect(current_user() ? 'dashboard' : 'auth/login');
+    }
+}
+
 // Public/auth routes
 $publicRoutes = [
     'home', 'auth/login', 'auth/signup', 'auth/logout',
     'admin/login', 'admin/logout',
 ];
-
-$isAdmin = str_starts_with($route, 'admin/') || $route === 'admin';
 
 try {
     switch (true) {
@@ -93,6 +118,20 @@ try {
             (new AdminController())->bonuses(); break;
         case $route === 'admin/popups':
             (new AdminController())->popups(); break;
+
+        case $route === 'admin/system-lock':
+            // Toggle the system-wide "lock user actions" flag (dev-only).
+            require_admin();
+            require_dev_unlock();
+            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                $cur = setting('lock_user_actions') === '1';
+                setting_set('lock_user_actions', $cur ? '0' : '1');
+                flash_set('success', $cur
+                    ? 'User actions UNLOCKED. The platform is live again.'
+                    : 'User actions LOCKED. Users can sign in and browse but cannot deposit, withdraw, rate tasks, activate packages, sign up, or edit profile.');
+            }
+            redirect('admin/developer');
+            break;
 
         default:
             http_response_code(404);
