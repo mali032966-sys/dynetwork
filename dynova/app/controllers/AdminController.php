@@ -490,4 +490,106 @@ class AdminController {
         $rows = $s->fetchAll();
         view('admin/transactions', compact('rows','type','allowed'), 'admin');
     }
+
+    // -------------------------------------------------- POPUP MESSAGES (developer)
+    public function popups(): void {
+        require_admin();
+        require_dev_unlock();
+        Popup::ensureSchema();
+
+        $errors = [];
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $action = $_POST['action'] ?? 'save';
+
+            if ($action === 'delete') {
+                Popup::delete((int)($_POST['id'] ?? 0));
+                flash_set('success', 'Popup deleted.');
+                redirect('admin/popups');
+            }
+
+            if ($action === 'toggle') {
+                $id = (int)($_POST['id'] ?? 0);
+                db()->prepare('UPDATE popups SET is_active = 1 - is_active WHERE id=?')->execute([$id]);
+                flash_set('success', 'Popup status updated.');
+                redirect('admin/popups');
+            }
+
+            // ---- save (create / update) ----
+            $id      = (int)($_POST['id'] ?? 0);
+            $type    = ($_POST['type'] ?? 'text') === 'image' ? 'image' : 'text';
+            $title   = trim((string)($_POST['title']   ?? ''));
+            $message = trim((string)($_POST['message'] ?? ''));
+            $startAt = trim((string)($_POST['start_at'] ?? ''));
+            $endAt   = trim((string)($_POST['end_at']   ?? ''));
+            $active  = !empty($_POST['is_active']);
+            $existing = $id ? Popup::find($id) : null;
+            $imagePath = $existing['image_path'] ?? null;
+
+            // datetime-local comes as "YYYY-MM-DDTHH:MM"; rewrite to MySQL DATETIME.
+            $fixDt = function (string $v): ?string {
+                if ($v === '') return null;
+                $v = str_replace('T', ' ', $v);
+                return strlen($v) === 16 ? $v . ':00' : $v;
+            };
+            $startAt = $fixDt($startAt);
+            $endAt   = $fixDt($endAt);
+
+            if ($startAt && $endAt && strtotime($endAt) <= strtotime($startAt)) {
+                $errors[] = 'End date must be after start date.';
+            }
+
+            if ($type === 'image') {
+                if (!empty($_FILES['image']['name']) && is_uploaded_file($_FILES['image']['tmp_name'])) {
+                    $f = $_FILES['image'];
+                    if ($f['size'] > 5 * 1024 * 1024) {
+                        $errors[] = 'Image must be 5 MB or smaller.';
+                    }
+                    $mime = function_exists('mime_content_type') ? mime_content_type($f['tmp_name']) : '';
+                    $okMimes = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
+                    if (!isset($okMimes[$mime])) {
+                        $errors[] = 'Unsupported image type. Use JPG, PNG, WEBP or GIF.';
+                    }
+                    if (!$errors) {
+                        $ext = $okMimes[$mime];
+                        $dir = __DIR__ . '/../../public/uploads/popups';
+                        if (!is_dir($dir)) @mkdir($dir, 0775, true);
+                        $name = 'popup_' . date('Ymd_His') . '_' . bin2hex(random_bytes(3)) . '.' . $ext;
+                        $abs  = $dir . '/' . $name;
+                        if (move_uploaded_file($f['tmp_name'], $abs)) {
+                            // Remove the previous image if we're replacing it.
+                            if ($existing && !empty($existing['image_path'])) {
+                                $oldAbs = __DIR__ . '/../../public/' . ltrim($existing['image_path'], '/');
+                                if (is_file($oldAbs)) @unlink($oldAbs);
+                            }
+                            $imagePath = 'uploads/popups/' . $name;
+                        } else {
+                            $errors[] = 'Failed to save uploaded image.';
+                        }
+                    }
+                }
+                if (!$imagePath) $errors[] = 'Image popups need an image file.';
+            } else {
+                if ($message === '') $errors[] = 'Text popups need a message.';
+            }
+
+            if (!$errors) {
+                $newId = Popup::save([
+                    'type'       => $type,
+                    'title'      => $title !== '' ? $title : null,
+                    'message'    => $type === 'text' ? $message : null,
+                    'image_path' => $type === 'image' ? $imagePath : null,
+                    'start_at'   => $startAt,
+                    'end_at'     => $endAt,
+                    'is_active'  => $active,
+                ], $id ?: null);
+                flash_set('success', $id ? 'Popup updated.' : 'Popup created.');
+                redirect('admin/popups');
+            }
+        }
+
+        $editId  = (int)($_GET['edit'] ?? 0);
+        $editing = $editId ? Popup::find($editId) : null;
+        $popups  = Popup::all();
+        view('admin/popups', compact('popups','editing','errors'), 'admin');
+    }
 }

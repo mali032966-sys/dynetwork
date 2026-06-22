@@ -39,6 +39,15 @@ $sections = [
         'bg'     => 'rgba(16,185,129,.12)',
         'testid' => 'dev-card-bonuses',
     ],
+    [
+        'route'  => 'admin/popups',
+        'title'  => 'Popup Messages',
+        'desc'   => 'Schedule a text or image popup that every user sees on their dashboard. Set start / end dates and toggle on/off any time.',
+        'icon'   => 'fa-bullhorn',
+        'color'  => '#ffb547',
+        'bg'     => 'rgba(255,181,71,.12)',
+        'testid' => 'dev-card-popups',
+    ],
 ];
 ?>
 

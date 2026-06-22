@@ -91,6 +91,8 @@ try {
             (new AdminController())->packages(); break;
         case $route === 'admin/bonuses':
             (new AdminController())->bonuses(); break;
+        case $route === 'admin/popups':
+            (new AdminController())->popups(); break;
 
         default:
             http_response_code(404);

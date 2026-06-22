@@ -136,6 +136,152 @@ $initial = $src !== '' ? strtoupper(mb_substr($src, 0, 1, 'UTF-8')) : '·';
 </div>
 
 <div class="copy-toast" id="copyToast">Copied to clipboard</div>
+
+<?php
+// =========================================================
+// Site-wide popup announcement (admin → Developer → Popups)
+// =========================================================
+$__popup = class_exists('Popup') ? Popup::activeForView() : null;
+if ($__popup):
+    $__pkey = 'dnv_popup_' . (int)$__popup['id'];
+?>
+<div class="dnv-popup-backdrop" id="dnvPopupBackdrop"
+     data-pop-key="<?= e($__pkey) ?>"
+     data-testid="dnv-popup" hidden>
+  <div class="dnv-popup" role="dialog" aria-modal="true" aria-labelledby="dnvPopupTitle">
+    <button type="button" class="dnv-popup-x" id="dnvPopupClose" aria-label="Close"
+            data-testid="dnv-popup-close">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+
+    <?php if ($__popup['type'] === 'image' && !empty($__popup['image_path'])): ?>
+      <div class="dnv-popup-image">
+        <img src="<?= asset(e($__popup['image_path'])) ?>"
+             alt="<?= e($__popup['title'] ?: 'Announcement') ?>"
+             data-testid="dnv-popup-image">
+      </div>
+    <?php endif; ?>
+
+    <?php if (!empty($__popup['title']) || (!empty($__popup['message']) && $__popup['type'] === 'text')): ?>
+      <div class="dnv-popup-body">
+        <?php if (!empty($__popup['title'])): ?>
+          <h3 id="dnvPopupTitle" class="dnv-popup-title" data-testid="dnv-popup-title">
+            <?= e($__popup['title']) ?>
+          </h3>
+        <?php endif; ?>
+        <?php if ($__popup['type'] === 'text' && !empty($__popup['message'])): ?>
+          <p class="dnv-popup-msg" data-testid="dnv-popup-message"><?= nl2br(e($__popup['message'])) ?></p>
+        <?php endif; ?>
+        <div class="dnv-popup-actions">
+          <button type="button" class="dnv-popup-cta" id="dnvPopupOk" data-testid="dnv-popup-ok">Got it</button>
+        </div>
+      </div>
+    <?php endif; ?>
+  </div>
+</div>
+
+<style>
+.dnv-popup-backdrop{
+  position:fixed; inset:0; z-index:9999;
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+  background:rgba(4,7,15,.78);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  animation:dnvFadeIn .22s ease forwards;
+}
+.dnv-popup-backdrop[hidden]{display:none;}
+.dnv-popup{
+  position:relative; width:100%; max-width:440px;
+  max-height:calc(100dvh - 40px); overflow:auto;
+  border-radius:22px;
+  background:linear-gradient(160deg, #15193c 0%, #0a0d22 60%, #08091a 100%);
+  border:1px solid rgba(141,91,255,.32);
+  box-shadow:0 30px 80px -20px rgba(141,91,255,.40),
+             0 0 0 1px rgba(255,255,255,.04) inset;
+  animation:dnvPop .26s cubic-bezier(.18,.85,.32,1.18) forwards;
+}
+.dnv-popup-x{
+  position:absolute; top:10px; right:10px; z-index:2;
+  width:34px; height:34px; border-radius:50%;
+  background:rgba(255,255,255,.10);
+  border:1px solid rgba(255,255,255,.16);
+  color:#fff; font-size:14px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:background .15s ease, transform .15s ease;
+}
+.dnv-popup-x:hover{ background:rgba(255,91,106,.22); transform:rotate(90deg); }
+.dnv-popup-image{ width:100%; background:#000; }
+.dnv-popup-image img{ display:block; width:100%; height:auto; max-height:60vh; object-fit:cover; }
+.dnv-popup-body{ padding:22px 22px 20px; }
+.dnv-popup-title{
+  margin:0 0 10px; font-size:20px; line-height:1.25; font-weight:800;
+  color:#fff; padding-right:40px;
+  background:linear-gradient(90deg,#3eb6ff,#8d5bff);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.dnv-popup-msg{
+  margin:0; color:#cbd5e1; font-size:14.5px; line-height:1.62;
+  white-space:pre-wrap; word-break:break-word;
+}
+.dnv-popup-actions{ display:flex; justify-content:flex-end; margin-top:18px; }
+.dnv-popup-cta{
+  appearance:none; border:0; cursor:pointer;
+  padding:10px 22px; border-radius:999px;
+  font-weight:700; font-size:13.5px; color:#fff; letter-spacing:.3px;
+  background:linear-gradient(120deg,#3eb6ff 0%,#8d5bff 100%);
+  box-shadow:0 12px 26px -10px rgba(141,91,255,.7);
+  transition:transform .12s ease, box-shadow .15s ease;
+}
+.dnv-popup-cta:hover{ transform:translateY(-1px); box-shadow:0 16px 30px -10px rgba(141,91,255,.85); }
+
+/* Image-only popup (no body section): the close button needs more contrast */
+.dnv-popup:not(:has(.dnv-popup-body)) .dnv-popup-x{
+  background:rgba(0,0,0,.55); border-color:rgba(255,255,255,.30);
+}
+
+@keyframes dnvFadeIn{ from{opacity:0} to{opacity:1} }
+@keyframes dnvPop{
+  from{ transform:translateY(14px) scale(.96); opacity:0; }
+  to  { transform:translateY(0)    scale(1);   opacity:1; }
+}
+
+/* Mobile tweaks */
+@media (max-width:520px){
+  .dnv-popup-backdrop{ padding:12px; }
+  .dnv-popup{ max-width:100%; border-radius:18px; }
+  .dnv-popup-body{ padding:18px 18px 16px; }
+  .dnv-popup-title{ font-size:18px; padding-right:36px; }
+  .dnv-popup-msg{ font-size:13.5px; }
+  .dnv-popup-image img{ max-height:50vh; }
+}
+</style>
+
+<script>
+(function(){
+  var bd   = document.getElementById('dnvPopupBackdrop');
+  if (!bd) return;
+  var key  = bd.getAttribute('data-pop-key') || 'dnv_popup';
+  // Respect a per-session dismissal so the same popup isn't shown on every
+  // page navigation; admin can roll out a new popup by saving with a new id.
+  try { if (sessionStorage.getItem(key) === '1') return; } catch (e) {}
+
+  bd.hidden = false;
+  document.documentElement.style.overflow = 'hidden';
+
+  function close(){
+    bd.hidden = true;
+    document.documentElement.style.overflow = '';
+    try { sessionStorage.setItem(key, '1'); } catch (e) {}
+  }
+  document.getElementById('dnvPopupClose').addEventListener('click', close);
+  var ok = document.getElementById('dnvPopupOk');
+  if (ok) ok.addEventListener('click', close);
+  bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !bd.hidden) close(); });
+})();
+</script>
+<?php endif; ?>
+
 <script src="<?= asset('js/app.js') ?>" defer></script>
 </body>
 </html>
