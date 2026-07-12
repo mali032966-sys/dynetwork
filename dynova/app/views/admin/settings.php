@@ -132,3 +132,75 @@ document.querySelectorAll('[onclick*="pm-edit"]').forEach(b=>{
   });
 });
 </script>
+
+<!-- ================================================================== -->
+<!-- 🧧 RED ENVELOPE — surprise discount on package activation / upgrade -->
+<!-- ================================================================== -->
+<div class="card" style="margin-top:18px" data-testid="red-envelope-card">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+    <div style="width:44px;height:44px;border-radius:12px;display:grid;place-items:center;
+                background:linear-gradient(135deg,#ff3b52,#c81f34);color:#fff;font-size:20px;flex-shrink:0">
+      <i class="fa-solid fa-envelope-open-text"></i>
+    </div>
+    <div>
+      <h3 style="margin:0;font-size:16px">Red Envelope — surprise discount</h3>
+      <div class="small muted" style="margin-top:2px">
+        Gives every user a discount that is automatically deducted when they activate or upgrade a package.
+      </div>
+    </div>
+  </div>
+
+  <form method="post" data-testid="red-envelope-form">
+    <?= csrf_field() ?>
+    <input type="hidden" name="section" value="red_envelope">
+
+    <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <label style="display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;
+                     background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.10)">
+        <input type="checkbox" name="red_envelope_enabled" value="1" <?= $reEnabled ? 'checked' : '' ?>
+               data-testid="re-enabled">
+        <span><b>Enable Red Envelope</b><br><span class="small muted">Master switch. Off = no discount is ever applied.</span></span>
+      </label>
+      <div style="padding:10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.10)">
+        <b>Discount mode</b>
+        <div class="small muted" style="margin-bottom:6px">Fixed per package or a random surprise picked when the user opens the envelope.</div>
+        <label style="margin-right:14px"><input type="radio" name="red_envelope_mode" value="fixed"  <?= $reMode==='fixed'  ? 'checked':'' ?> data-testid="re-mode-fixed">  Fixed per package</label>
+        <label><input type="radio" name="red_envelope_mode" value="random" <?= $reMode==='random' ? 'checked':'' ?> data-testid="re-mode-random"> Random surprise</label>
+      </div>
+    </div>
+
+    <h4 style="margin:16px 0 8px;font-size:14px">Per-package discount amounts (PKR)</h4>
+    <div class="small muted" style="margin-bottom:8px">
+      Enter <b>0</b> or leave blank to skip a package. In <b>random</b> mode these amounts still form the pool the surprise is picked from.
+    </div>
+    <table class="table" style="margin-bottom:12px">
+      <thead><tr><th style="width:60%">Package</th><th>Discount (Rs)</th></tr></thead>
+      <tbody>
+      <?php if (empty($rePackages)): ?>
+        <tr><td colspan="2" class="empty">No packages configured yet.</td></tr>
+      <?php else: foreach ($rePackages as $rp):
+        $amt = (float)($reMap[(string)$rp['id']] ?? $reMap[$rp['id']] ?? 0);
+      ?>
+        <tr>
+          <td>
+            <b><?= e($rp['name']) ?></b>
+            <span class="small muted"> · <?= e(strtoupper($rp['tier'] ?: 'standard')) ?> · List price <?= money($rp['price']) ?></span>
+          </td>
+          <td>
+            <input class="input" type="number" min="0" step="1"
+                   name="red_envelope_amounts[<?= (int)$rp['id'] ?>]"
+                   value="<?= $amt > 0 ? number_format($amt, 0, '.', '') : '' ?>"
+                   placeholder="0"
+                   data-testid="re-amount-<?= (int)$rp['id'] ?>"
+                   style="max-width:180px">
+          </td>
+        </tr>
+      <?php endforeach; endif; ?>
+      </tbody>
+    </table>
+
+    <button class="btn inline" type="submit" data-testid="re-save">
+      <i class="fa-solid fa-floppy-disk"></i> Save Red Envelope settings
+    </button>
+  </form>
+</div>

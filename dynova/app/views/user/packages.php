@@ -6,6 +6,10 @@ function pkg_money($amount) {
     $f = $n == (int) $n ? number_format($n) : number_format($n, 2);
     return APP_CURRENCY_SYMBOL . ' ' . $f;
 }
+// 🧧 Red envelope state — used to preview the effective price on each card.
+$reOn      = red_envelope_enabled();
+$reMode    = red_envelope_mode();
+$rePicked  = (float)($_SESSION['red_envelope_picked'] ?? 0);
 ?>
 <div class="topbar topbar-flex">
   <div class="page-head">
@@ -25,8 +29,16 @@ function pkg_money($amount) {
       <div class="active-pkg-meta">
         <span><i class="fa-solid fa-star"></i> <?= (int)$active['daily_tasks'] ?> tasks/day</span>
         <span><i class="fa-solid fa-coins"></i> <?= money($active['daily_earning']) ?> /day</span>
+        <span><i class="fa-solid fa-receipt"></i> Paid <?= money($active['price_paid']) ?></span>
       </div>
     </div>
+  </div>
+<?php endif; ?>
+
+<?php if ($rePicked > 0): ?>
+  <div class="card stagger" style="background:linear-gradient(120deg,rgba(255,91,106,.14),rgba(255,181,71,.06));border:1px dashed rgba(255,91,106,.45);padding:12px 16px" data-testid="re-active-banner">
+    <b style="color:#ffd54a">🧧 Red Envelope active:</b>
+    <span class="small muted">A <b style="color:#fff"><?= money($rePicked) ?></b> discount will be applied automatically to your next activation or upgrade.</span>
   </div>
 <?php endif; ?>
 
@@ -35,6 +47,29 @@ function pkg_money($amount) {
     $tier = $p['tier'] ?: 'standard';
     $isFeatured = (int)$p['is_featured'] === 1;
     $isCurrent = $active && (int)$active['package_id'] === (int)$p['id'];
+
+    // ------ Discount + upgrade math ------
+    $listPrice = (float)$p['price'];
+    // Effective discount (per-package fixed, or session-picked random)
+    $reFixed   = 0.0;
+    if ($reOn) {
+        if ($reMode === 'fixed') {
+            $map = red_envelope_discounts();
+            $reFixed = (float)($map[(string)$p['id']] ?? $map[$p['id']] ?? 0);
+        } elseif ($reMode === 'random' && $rePicked > 0) {
+            $reFixed = $rePicked;
+        }
+    }
+
+    // Upgrade cost (pro-rata): pay the price difference vs currently active row
+    $upgradeCost = null;
+    $upgradeAvailable = false;
+    if ($active && !$isCurrent && $listPrice > (float)$active['price_paid']) {
+        $diff = $listPrice - (float)$active['price_paid'];
+        $upgradeCost = max(0.0, $diff - $reFixed);
+        $upgradeAvailable = true;
+    }
+    $effectiveActivate = max(0.0, $listPrice - $reFixed);
   ?>
   <div class="pkg-card <?= e($tier) ?> <?= $isFeatured ? 'featured' : '' ?>" data-testid="package-<?= e(strtolower($p['name'])) ?>">
     <?php if ($isFeatured): ?>
@@ -45,12 +80,23 @@ function pkg_money($amount) {
         <div class="pkg-name"><?= e($p['name']) ?></div>
         <div class="pkg-tier"><?= e(strtoupper($tier)) ?> · PACKAGE</div>
       </div>
+      <?php if ($reFixed > 0 && !$isCurrent): ?>
+        <div class="pkg-re-badge" title="Red Envelope discount">
+          🧧 −<?= number_format($reFixed) ?>
+        </div>
+      <?php endif; ?>
     </div>
 
     <div class="pkg-price">
-      <span class="cur">Rs</span>
-      <span class="amt"><?= number_format((float)$p['price']) ?></span>
-      <span class="per">one-time</span>
+      <?php if ($reFixed > 0 && !$isCurrent): ?>
+        <span class="cur">Rs</span>
+        <span class="amt"><?= number_format($effectiveActivate) ?></span>
+        <span class="per"><s style="opacity:.55"><?= number_format($listPrice) ?></s> one-time</span>
+      <?php else: ?>
+        <span class="cur">Rs</span>
+        <span class="amt"><?= number_format($listPrice) ?></span>
+        <span class="per">one-time</span>
+      <?php endif; ?>
     </div>
 
     <?php
@@ -87,22 +133,39 @@ function pkg_money($amount) {
       <button class="btn pkg-btn ghost" disabled data-testid="pkg-current-<?= (int)$p['id'] ?>">
         <i class="fa-solid fa-check"></i> Current plan
       </button>
+    <?php elseif ($upgradeAvailable): ?>
+      <div class="pkg-upgrade-note" data-testid="pkg-upgrade-note-<?= (int)$p['id'] ?>">
+        <i class="fa-solid fa-arrows-up-to-line"></i>
+        Pay the difference: <b><?= money($upgradeCost) ?></b>
+        <?php if ($reFixed > 0): ?>
+          <span class="small muted"> (Rs <?= number_format($listPrice - (float)$active['price_paid']) ?> − 🧧 <?= number_format($reFixed) ?>)</span>
+        <?php endif; ?>
+      </div>
+      <form method="post" onsubmit="return confirm('Upgrade to <?= e($p['name']) ?>?\n\nYou will pay the difference: <?= money($upgradeCost) ?>. Your current plan will be replaced immediately.')">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="upgrade">
+        <input type="hidden" name="package_id" value="<?= (int)$p['id'] ?>">
+        <button class="btn pkg-btn" data-testid="pkg-upgrade-<?= (int)$p['id'] ?>">
+          <i class="fa-solid fa-rocket"></i> Upgrade — pay <?= money($upgradeCost) ?>
+        </button>
+      </form>
     <?php elseif ($active): ?>
-      <form method="post" onsubmit="return confirm('Activate <?= e($p['name']) ?> for <?= money($p['price']) ?>?\n\nYour current plan will be replaced.')">
+      <!-- Currently on a plan but this card is cheaper/equal — treat as a fresh activation which replaces the current plan. -->
+      <form method="post" onsubmit="return confirm('Switch to <?= e($p['name']) ?> for <?= money($effectiveActivate) ?>?\n\nThis is a full activation, not a pro-rata upgrade.')">
         <?= csrf_field() ?>
         <input type="hidden" name="action" value="activate">
         <input type="hidden" name="package_id" value="<?= (int)$p['id'] ?>">
-        <button class="btn pkg-btn" data-testid="pkg-upgrade-<?= (int)$p['id'] ?>">
-          <i class="fa-solid fa-rocket"></i> Upgrade to <?= e($p['name']) ?>
+        <button class="btn pkg-btn ghost" data-testid="pkg-switch-<?= (int)$p['id'] ?>">
+          <i class="fa-solid fa-arrow-right-arrow-left"></i> Switch to <?= e($p['name']) ?>
         </button>
       </form>
     <?php else: ?>
-      <form method="post" onsubmit="return confirm('Activate <?= e($p['name']) ?> for <?= money($p['price']) ?>?')">
+      <form method="post" onsubmit="return confirm('Activate <?= e($p['name']) ?> for <?= money($effectiveActivate) ?>?')">
         <?= csrf_field() ?>
         <input type="hidden" name="action" value="activate">
         <input type="hidden" name="package_id" value="<?= (int)$p['id'] ?>">
         <button class="btn pkg-btn" data-testid="pkg-activate-<?= (int)$p['id'] ?>">
-          <i class="fa-solid fa-rocket"></i> Activate Package
+          <i class="fa-solid fa-rocket"></i> Activate — pay <?= money($effectiveActivate) ?>
         </button>
       </form>
     <?php endif; ?>
@@ -120,6 +183,25 @@ function pkg_money($amount) {
     <li>Activating a package debits the price from your <b>wallet balance</b>.</li>
     <li>You instantly unlock the package's daily task limit and earning rate.</li>
     <li>Earnings are credited as you complete tasks every day.</li>
-    <li>Upgrade any time — activating a higher tier replaces your current plan.</li>
+    <li><b>Upgrading</b> to a higher-priced tier only charges you the price difference — pay less, unlock more instantly.</li>
+    <li>🧧 Red Envelope discounts, when active, are applied automatically at checkout.</li>
   </ul>
 </div>
+
+<style>
+.pkg-re-badge{
+  display:inline-flex; align-items:center; gap:4px;
+  padding:4px 9px; border-radius:999px; font-size:11px; font-weight:800;
+  color:#fff; background:linear-gradient(120deg,#ff5b6a,#c81f34);
+  box-shadow:0 6px 14px -6px rgba(255,91,106,.55);
+  letter-spacing:.3px;
+}
+.pkg-upgrade-note{
+  margin:8px 0 10px; padding:8px 12px; border-radius:10px;
+  background:rgba(62,182,255,.08); border:1px solid rgba(62,182,255,.25);
+  font-size:12.5px; color:#cdebff;
+}
+.pkg-upgrade-note b{ color:#fff; }
+.pkg-upgrade-note i{ margin-right:4px; color:#3eb6ff; }
+.pkg-btn.ghost{ background:transparent; color:var(--txt); border:1px solid rgba(255,255,255,.14); }
+</style>

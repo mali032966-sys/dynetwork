@@ -180,19 +180,41 @@ class TaskPackage {
         }
         $u = User::find($uid);
         if (!$u) return ['ok' => false, 'error' => 'User not found.'];
-        if ((float) $u['balance'] < (float) $pkg['price']) {
+
+        // ---- Red Envelope discount (applies only on fresh activation, not
+        //      on package upgrades — upgrades already benefit from the
+        //      pro-rata reduction).
+        $listPrice = (float) $pkg['price'];
+        $discount  = red_envelope_discount_for($uid, $packageId);
+        $finalPrice = max(0.0, $listPrice - $discount);
+
+        if ((float) $u['balance'] < $finalPrice) {
             return ['ok' => false, 'error' =>
-                'Insufficient balance. You need ' . money($pkg['price']) . ' to activate this package.'];
+                'Insufficient balance. You need ' . money($finalPrice) . ' to activate this package.'];
         }
         // Debit + log + insert in one shot
         $pdo = db();
         $pdo->beginTransaction();
         try {
-            User::subtractBalance($uid, (float) $pkg['price']);
-            Transaction::log(
-                $uid, 'admin_adjust', -1 * (float) $pkg['price'],
-                'Activated package: ' . $pkg['name']
-            );
+            if ($finalPrice > 0) {
+                User::subtractBalance($uid, $finalPrice);
+                Transaction::log(
+                    $uid, 'admin_adjust', -1 * $finalPrice,
+                    'Activated package: ' . $pkg['name']
+                );
+            }
+            if ($discount > 0) {
+                // A zero-amount audit line so the discount is visible in the
+                // user's ledger (no balance change — user was simply charged less).
+                Transaction::log(
+                    $uid, 'admin_adjust', 0,
+                    '🧧 Red Envelope discount: ' . money($discount) . ' off ' . $pkg['name']
+                );
+                // Consume any random-mode session pick so it can't be reused.
+                if (!empty($_SESSION['red_envelope_picked'])) {
+                    unset($_SESSION['red_envelope_picked']);
+                }
+            }
             $expires = date('Y-m-d H:i:s', time() + ((int) $pkg['validity_days']) * 86400);
             $pdo->prepare(
                 'INSERT INTO user_packages
@@ -202,7 +224,7 @@ class TaskPackage {
                 $uid, $packageId,
                 (int) $pkg['daily_tasks'],
                 (float) $pkg['daily_earning'],
-                (float) $pkg['price'],
+                $finalPrice,
                 $expires,
             ]);
             $pdo->commit();
@@ -213,10 +235,151 @@ class TaskPackage {
             } catch (Throwable $e) {
                 // Don't fail the activation if bonus crediting fails.
             }
-            return ['ok' => true, 'expires' => $expires];
+            return ['ok' => true, 'expires' => $expires, 'paid' => $finalPrice, 'discount' => $discount];
         } catch (Throwable $e) {
             $pdo->rollBack();
             return ['ok' => false, 'error' => 'Activation failed: ' . $e->getMessage()];
         }
+    }
+
+    /**
+     * Ensure the extra columns needed for the pro-rata upgrade feature exist
+     * on `user_packages`. Called on-demand by controllers that need them —
+     * MariaDB does not support `ADD COLUMN IF NOT EXISTS` universally, so we
+     * check first via information_schema.
+     */
+    public static function ensureUpgradeColumns(): void
+    {
+        static $done = false;
+        if ($done) return;
+        try {
+            $s = db()->query("SHOW COLUMNS FROM user_packages LIKE 'upgraded_from_package_id'");
+            if (!$s->fetch()) {
+                db()->exec(
+                    "ALTER TABLE user_packages
+                        ADD COLUMN upgraded_from_package_id INT UNSIGNED NULL AFTER package_id,
+                        ADD COLUMN upgraded_at TIMESTAMP NULL DEFAULT NULL,
+                        ADD COLUMN refund_amount DECIMAL(10,2) NOT NULL DEFAULT 0"
+                );
+            }
+        } catch (Throwable $e) {
+            // best-effort — a subsequent visit will retry
+        }
+        $done = true;
+    }
+
+    /**
+     * Pro-rata upgrade to a higher-priced package.
+     *  - Charges  (new_price - old_price)   minus any Red Envelope discount.
+     *  - Marks the old row `status = 'expired'` and stamps `upgraded_at`.
+     *  - Creates a fresh row for the new package that references the old one
+     *    via `upgraded_from_package_id`.
+     */
+    public static function upgrade(int $uid, int $newPackageId): array
+    {
+        self::ensureUpgradeColumns();
+
+        $current = self::activeForUser($uid);
+        if (!$current) {
+            return ['ok' => false, 'error' => 'You have no active package to upgrade. Please activate one first.'];
+        }
+        if ((int) $current['package_id'] === $newPackageId) {
+            return ['ok' => false, 'error' => 'You are already on this package.'];
+        }
+        $newPkg = self::find($newPackageId);
+        if (!$newPkg || !$newPkg['is_active']) {
+            return ['ok' => false, 'error' => 'Selected package is not available.'];
+        }
+        $u = User::find($uid);
+        if (!$u) return ['ok' => false, 'error' => 'User not found.'];
+
+        $oldPrice = (float) $current['price_paid'];
+        $newPrice = (float) $newPkg['price'];
+        if ($newPrice <= $oldPrice) {
+            return ['ok' => false, 'error' => 'You can only upgrade to a higher-priced package.'];
+        }
+        $diff     = $newPrice - $oldPrice;
+        $discount = red_envelope_discount_for($uid, $newPackageId);
+        $cost     = max(0.0, $diff - $discount);
+
+        if ((float) $u['balance'] < $cost) {
+            return ['ok' => false, 'error' =>
+                'Insufficient balance. You need ' . money($cost) . ' to upgrade to ' . $newPkg['name'] . '.'];
+        }
+
+        $pdo = db();
+        $pdo->beginTransaction();
+        try {
+            if ($cost > 0) {
+                User::subtractBalance($uid, $cost);
+                Transaction::log(
+                    $uid, 'admin_adjust', -1 * $cost,
+                    'Package upgrade to ' . $newPkg['name'] . ' (pro-rata: pay difference)'
+                );
+            }
+            if ($discount > 0) {
+                Transaction::log(
+                    $uid, 'admin_adjust', 0,
+                    '🧧 Red Envelope discount on upgrade: ' . money($discount) . ' off ' . $newPkg['name']
+                );
+                if (!empty($_SESSION['red_envelope_picked'])) {
+                    unset($_SESSION['red_envelope_picked']);
+                }
+            }
+            // Mark the old active row as expired + stamp upgrade time
+            $pdo->prepare(
+                "UPDATE user_packages
+                    SET status = 'expired', upgraded_at = NOW()
+                  WHERE id = ?"
+            )->execute([(int) $current['id']]);
+
+            // Create the new active row referencing the old package
+            $expires = date('Y-m-d H:i:s', time() + ((int) $newPkg['validity_days']) * 86400);
+            $pdo->prepare(
+                'INSERT INTO user_packages
+                    (user_id, package_id, upgraded_from_package_id,
+                     daily_tasks, daily_earning, price_paid, expires_at, upgraded_at)
+                 VALUES (?,?,?,?,?,?,?,NOW())'
+            )->execute([
+                $uid, $newPackageId, (int) $current['package_id'],
+                (int) $newPkg['daily_tasks'],
+                (float) $newPkg['daily_earning'],
+                $cost,
+                $expires,
+            ]);
+            $pdo->commit();
+            return [
+                'ok'       => true,
+                'expires'  => $expires,
+                'cost'     => $cost,
+                'discount' => $discount,
+                'diff'     => $diff,
+            ];
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            return ['ok' => false, 'error' => 'Upgrade failed: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * Return the full package-history rows for a user (newest first),
+     * including the previous-package name where applicable. Used by the
+     * admin User-edit page to show the upgrade trail.
+     */
+    public static function historyForUser(int $uid): array
+    {
+        self::ensureUpgradeColumns();
+        $s = db()->prepare(
+            "SELECT up.*,
+                    p.name  AS pkg_name,  p.tier  AS pkg_tier,
+                    fp.name AS from_name, fp.tier AS from_tier
+               FROM user_packages up
+               JOIN task_packages p  ON p.id  = up.package_id
+          LEFT JOIN task_packages fp ON fp.id = up.upgraded_from_package_id
+              WHERE up.user_id = ?
+              ORDER BY up.id DESC"
+        );
+        $s->execute([$uid]);
+        return $s->fetchAll();
     }
 }

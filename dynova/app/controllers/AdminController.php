@@ -123,14 +123,34 @@ class AdminController {
     public function users(): void {
         require_admin();
         $q = trim($_GET['q'] ?? '');
+
+        // Pagination controls (25 / 50 / 100 per page; default 50).
+        $perPage = (int)($_GET['per_page'] ?? 50);
+        if (!in_array($perPage, [25, 50, 100], true)) $perPage = 50;
+        $page    = max(1, (int)($_GET['page'] ?? 1));
+        $offset  = ($page - 1) * $perPage;
+
+        $where  = '';
+        $params = [];
         if ($q !== '') {
-            $s = db()->prepare("SELECT * FROM users WHERE whatsapp LIKE ? OR name LIKE ? OR referral_code LIKE ? ORDER BY id DESC LIMIT 200");
-            $s->execute(["%$q%","%$q%","%$q%"]);
-        } else {
-            $s = db()->query('SELECT * FROM users ORDER BY id DESC LIMIT 200');
+            $where = 'WHERE whatsapp LIKE ? OR name LIKE ? OR referral_code LIKE ?';
+            $like  = "%$q%";
+            $params = [$like, $like, $like];
         }
+        // Total row count for the pagination bar
+        $cs = db()->prepare("SELECT COUNT(*) FROM users $where");
+        $cs->execute($params);
+        $total = (int)$cs->fetchColumn();
+
+        // Page rows (LIMIT/OFFSET must be integer-cast — not bound as params
+        // to avoid emulation quoting on some MariaDB builds).
+        $sql = "SELECT * FROM users $where ORDER BY id DESC LIMIT $perPage OFFSET $offset";
+        $s   = db()->prepare($sql);
+        $s->execute($params);
         $users = $s->fetchAll();
-        view('admin/users', compact('users','q'), 'admin');
+
+        $totalPages = max(1, (int)ceil($total / $perPage));
+        view('admin/users', compact('users','q','page','perPage','total','totalPages'), 'admin');
     }
     public function userEdit(): void {
         require_admin();
@@ -157,7 +177,8 @@ class AdminController {
             redirect('admin/users/edit', ['id' => $id]);
         }
         $tx = Transaction::forUser($id, 30);
-        view('admin/user_edit', compact('u','tx'), 'admin');
+        $pkgHistory = TaskPackage::historyForUser($id);
+        view('admin/user_edit', compact('u','tx','pkgHistory'), 'admin');
     }
 
     // -------------------------------------------------- DEPOSITS
@@ -317,6 +338,22 @@ class AdminController {
             } elseif ($section === 'pm_delete') {
                 PaymentMethod::delete((int)$_POST['id']);
                 flash_set('success','Payment method deleted.');
+            } elseif ($section === 'red_envelope') {
+                // 🧧 Red Envelope surprise-discount configuration
+                $enabled = isset($_POST['red_envelope_enabled']) ? '1' : '0';
+                $mode    = ($_POST['red_envelope_mode'] ?? 'fixed') === 'random' ? 'random' : 'fixed';
+                // Build the JSON map from the per-package inputs (indexed by
+                // task_package.id). Only positive numbers are stored.
+                $map = [];
+                foreach ((array)($_POST['red_envelope_amounts'] ?? []) as $pid => $amt) {
+                    $pid = (int)$pid;
+                    $amt = (float)$amt;
+                    if ($pid > 0 && $amt > 0) $map[(string)$pid] = round($amt, 2);
+                }
+                setting_set('red_envelope_enabled', $enabled);
+                setting_set('red_envelope_mode', $mode);
+                setting_set('red_envelope_discounts', json_encode($map));
+                flash_set('success', 'Red Envelope settings updated.');
             } elseif ($section === 'admin_password') {
                 // Admin self-service password change. Requires the current
                 // password, never a dev unlock — admins must always be able
@@ -355,7 +392,12 @@ class AdminController {
             'site_name'        => setting('site_name', APP_NAME),
             'site_tagline'     => setting('site_tagline', 'Rate. Earn. Refer.'),
         ];
-        view('admin/settings', compact('values','methods'), 'admin');
+        // 🧧 Red Envelope config for the settings section
+        $rePackages = TaskPackage::all();
+        $reEnabled  = red_envelope_enabled();
+        $reMode     = red_envelope_mode();
+        $reMap      = red_envelope_discounts();
+        view('admin/settings', compact('values','methods','rePackages','reEnabled','reMode','reMap'), 'admin');
     }
 
     // -------------------------------------------------- RANKS
