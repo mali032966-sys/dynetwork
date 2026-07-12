@@ -10,57 +10,16 @@
 
 <?php
 // ------------------------------------------------------------------
-// 🧧 Red Envelope — single-use, deposit-time discount coupon.
-//    Rendered as a red voucher on the dashboard (mobile-optimised).
-//    "CLAIM" triggers a JS burst animation + popup that guides the
-//    user to the Deposit page where the discount is applied.
+// 🧧 Red Envelope — coupon CSS + burst/popup JS.
+//   The visible coupon markup is rendered later inside the balance
+//   /coupon grid (.dash-hero) so it sits beside the Total Balance
+//   card on desktop and stacks below it on mobile.
 // ------------------------------------------------------------------
-$reOn      = red_envelope_enabled();
-$reClaim   = $reOn ? RedEnvelope::activeClaim((int)$u['id']) : null;
-$reEver    = $reOn ? RedEnvelope::hasEverClaimed((int)$u['id']) : false;
-$reHeadline= $reOn ? red_envelope_headline_amount() : 0;
-$reCanClaim= $reOn && !$reEver && $reHeadline > 0;      // has never seen one
-$reReady   = $reClaim && (int)$reClaim['status'] === 0; // legacy check (not used)
-$reReady   = $reClaim !== null;                          // has an active claim
-if ($reOn && ($reCanClaim || $reReady)):
-    $rePreviewAmt = $reReady ? (float)$reClaim['amount'] : $reHeadline;
+$reOn    = red_envelope_enabled();
+$reClaim = $reOn ? RedEnvelope::activeClaim((int)$u['id']) : null;
+$reReady = $reClaim !== null;
+if ($reOn):
 ?>
-<div class="coupon-wrap" data-testid="red-envelope-card"
-     data-state="<?= $reReady ? 'ready' : 'unclaimed' ?>"
-     data-amount="<?= number_format($rePreviewAmt, 0, '.', '') ?>">
-  <div class="coupon">
-    <div class="coupon-stub">
-      <span class="coupon-stub-text">COUPON</span>
-    </div>
-    <div class="coupon-dashed"></div>
-    <div class="coupon-body">
-      <div class="coupon-kicker"><i class="fa-solid fa-gift"></i> Red Envelope</div>
-      <div class="coupon-headline">DISCOUNT VOUCHER</div>
-      <div class="coupon-save">
-        SAVE <span class="coupon-amt">Rs <?= number_format($rePreviewAmt) ?></span>
-      </div>
-      <div class="coupon-note">Applied automatically on your next deposit.</div>
-      <?php if ($reReady): ?>
-        <a href="<?= route_url('wallet/deposit') ?>" class="coupon-btn" data-testid="re-proceed-deposit">
-          Proceed to Deposit <i class="fa-solid fa-arrow-right"></i>
-        </a>
-      <?php else: ?>
-        <form method="post" action="<?= route_url('wallet/red-envelope-claim') ?>" style="display:contents">
-          <?= csrf_field() ?>
-          <button type="submit" class="coupon-btn" id="reClaimBtn" data-testid="re-claim-btn">
-            CLAIM <i class="fa-solid fa-hand-pointer"></i>
-          </button>
-        </form>
-      <?php endif; ?>
-    </div>
-    <div class="coupon-notches left">
-      <?php for ($i=0;$i<8;$i++) echo '<span></span>'; ?>
-    </div>
-    <div class="coupon-notches right">
-      <?php for ($i=0;$i<8;$i++) echo '<span></span>'; ?>
-    </div>
-  </div>
-</div>
 
 <style>
 /* ============ Coupon / voucher — red style ============ */
@@ -334,6 +293,82 @@ $activePkg = TaskPackage::activeForUser((int)$u['id']);
 // against the previous release can see the swap point.
 ?>
 
+<?php
+// ------------------------------------------------------------------
+// 🧧 Red Envelope — coupon voucher (v2.1 per-package).
+//   Headline copy depends on the user's current package:
+//    - none active         → "Get up to Rs X off on your first package!"
+//    - has active package  → "Get Rs Y off when you upgrade to <next>!"
+// ------------------------------------------------------------------
+$reOn       = red_envelope_enabled();
+$reClaim    = $reOn ? RedEnvelope::activeClaim((int)$u['id']) : null;
+$reEver     = $reOn ? RedEnvelope::hasEverClaimed((int)$u['id']) : false;
+[$reTargetAmt, $reTargetPkgId, $reTargetName, $reIsUpgrade] =
+    $reOn ? red_envelope_target_for_user((int)$u['id']) : [0.0, 0, '', false];
+$reCanClaim = $reOn && !$reEver && $reTargetAmt > 0;    // never claimed yet
+$reReady    = $reClaim !== null;                          // has an active claim
+if ($reOn && ($reCanClaim || $reReady)):
+    $rePreviewAmt = $reReady ? (float)$reClaim['amount'] : (float)$reTargetAmt;
+
+    // Headline strings
+    if ($reReady) {
+        $reHeadline = 'SAVE';
+        $reNote     = 'Applied automatically on your next deposit.';
+    } elseif ($reIsUpgrade) {
+        $reHeadline = 'UPGRADE BONUS';
+        $reNote     = 'Get Rs '.number_format($rePreviewAmt).' off when you upgrade to '.($reTargetName ?: 'the next tier').'.';
+    } else {
+        $reHeadline = 'DISCOUNT VOUCHER';
+        $reNote     = 'Up to Rs '.number_format($rePreviewAmt).' off on your first package.';
+    }
+?>
+<div class="dash-hero" data-testid="dash-hero-grid">
+  <div class="card balance-card stagger" data-testid="balance-card">
+    <div class="balance-label">Total Balance</div>
+    <div class="balance-amount" data-testid="balance-amount"><?= money($u['balance']) ?></div>
+  <?php if ($todayEarnings > 0): ?>
+    <div class="balance-trend">+ <?= money($todayEarnings) ?> today</div>
+  <?php else: ?>
+    <div class="balance-trend" style="color:var(--txt-mute)">Start earning today</div>
+  <?php endif; ?>
+  <span class="pkr-badge"><i class="fa-solid fa-bolt"></i> PKR Wallet · <?= e($u['referral_code']) ?></span>
+  </div>
+
+  <!-- Coupon voucher — sits beside the balance card on desktop -->
+  <div class="coupon-wrap" data-testid="red-envelope-card"
+       data-state="<?= $reReady ? 'ready' : 'unclaimed' ?>"
+       data-amount="<?= number_format($rePreviewAmt, 0, '.', '') ?>">
+    <div class="coupon">
+      <div class="coupon-stub"><span class="coupon-stub-text">COUPON</span></div>
+      <div class="coupon-dashed"></div>
+      <div class="coupon-body">
+        <div class="coupon-kicker"><i class="fa-solid fa-gift"></i> Red Envelope</div>
+        <div class="coupon-headline"><?= e($reHeadline) ?></div>
+        <div class="coupon-save">SAVE <span class="coupon-amt">Rs <?= number_format($rePreviewAmt) ?></span></div>
+        <div class="coupon-note"><?= e($reNote) ?></div>
+        <?php if ($reReady): ?>
+          <a href="<?= route_url('wallet/deposit') ?>" class="coupon-btn" data-testid="re-proceed-deposit">
+            Proceed to Deposit <i class="fa-solid fa-arrow-right"></i>
+          </a>
+        <?php else: ?>
+          <form method="post" action="<?= route_url('wallet/red-envelope-claim') ?>" style="display:contents">
+            <?= csrf_field() ?>
+            <button type="submit" class="coupon-btn" id="reClaimBtn" data-testid="re-claim-btn">
+              CLAIM <i class="fa-solid fa-hand-pointer"></i>
+            </button>
+          </form>
+        <?php endif; ?>
+      </div>
+      <div class="coupon-notches left">
+        <?php for ($i=0;$i<8;$i++) echo '<span></span>'; ?>
+      </div>
+      <div class="coupon-notches right">
+        <?php for ($i=0;$i<8;$i++) echo '<span></span>'; ?>
+      </div>
+    </div>
+  </div>
+</div>
+<?php else: ?>
 <div class="card balance-card stagger" data-testid="balance-card">
   <div class="balance-label">Total Balance</div>
   <div class="balance-amount" data-testid="balance-amount"><?= money($u['balance']) ?></div>
@@ -344,6 +379,22 @@ $activePkg = TaskPackage::activeForUser((int)$u['id']);
   <?php endif; ?>
   <span class="pkr-badge"><i class="fa-solid fa-bolt"></i> PKR Wallet · <?= e($u['referral_code']) ?></span>
 </div>
+<?php endif; ?>
+
+<style>
+/* Balance + Coupon side-by-side on desktop, stacked on mobile */
+.dash-hero{
+  display:grid; gap:14px; margin:0 0 16px;
+  grid-template-columns:minmax(0, 1.05fr) minmax(0, .95fr);
+  align-items:stretch;
+}
+.dash-hero .balance-card{ margin:0; }
+.dash-hero .coupon-wrap { margin:0; height:100%; display:flex; }
+.dash-hero .coupon-wrap .coupon{ width:100%; }
+@media (max-width:760px){
+  .dash-hero{ grid-template-columns:1fr; }
+}
+</style>
 
 <!-- Referral link share card -->
 <div class="card ref-link-card stagger" data-testid="dash-referral-card">

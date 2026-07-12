@@ -360,17 +360,19 @@ class AdminController {
                 PaymentMethod::delete((int)$_POST['id']);
                 flash_set('success','Payment method deleted.');
             } elseif ($section === 'red_envelope') {
-                // 🧧 Red Envelope v2 — single-use coupon, deposit-time discount.
+                // 🧧 Red Envelope v2.1 — per-package amounts, deposit-time discount.
                 $enabled = isset($_POST['red_envelope_enabled']) ? '1' : '0';
                 $mode    = ($_POST['red_envelope_mode'] ?? 'fixed') === 'random' ? 'random' : 'fixed';
-                $amount  = max(0.0, (float)($_POST['red_envelope_amount'] ?? 0));
-                $rmin    = max(0.0, (float)($_POST['red_envelope_min']    ?? 0));
-                $rmax    = max($rmin, (float)($_POST['red_envelope_max']  ?? 0));
-                setting_set('red_envelope_enabled', $enabled);
-                setting_set('red_envelope_mode',    $mode);
-                setting_set('red_envelope_amount',  (string)$amount);
-                setting_set('red_envelope_min',     (string)$rmin);
-                setting_set('red_envelope_max',     (string)$rmax);
+                // Build the per-package JSON map from the form inputs.
+                $map = [];
+                foreach ((array)($_POST['red_envelope_amounts'] ?? []) as $pid => $amt) {
+                    $pid = (int)$pid;
+                    $amt = (float)$amt;
+                    if ($pid > 0 && $amt > 0) $map[(string)$pid] = round($amt, 2);
+                }
+                setting_set('red_envelope_enabled',   $enabled);
+                setting_set('red_envelope_mode',      $mode);
+                setting_set('red_envelope_discounts', json_encode($map));
                 flash_set('success', 'Red Envelope settings updated.');
             } elseif ($section === 'admin_password') {
                 // Admin self-service password change. Requires the current
@@ -410,13 +412,12 @@ class AdminController {
             'site_name'        => setting('site_name', APP_NAME),
             'site_tagline'     => setting('site_tagline', 'Rate. Earn. Refer.'),
         ];
-        // 🧧 Red Envelope v2 config
-        $reEnabled = red_envelope_enabled();
-        $reMode    = red_envelope_mode();
-        $reAmount  = (float) setting('red_envelope_amount', 0);
-        $reMin     = (float) setting('red_envelope_min', 0);
-        $reMax     = (float) setting('red_envelope_max', 0);
-        view('admin/settings', compact('values','methods','reEnabled','reMode','reAmount','reMin','reMax'), 'admin');
+        // 🧧 Red Envelope v2.1 config — per-package amounts
+        $rePackages = TaskPackage::all();
+        $reEnabled  = red_envelope_enabled();
+        $reMode     = red_envelope_mode();
+        $reMap      = red_envelope_discounts();
+        view('admin/settings', compact('values','methods','rePackages','reEnabled','reMode','reMap'), 'admin');
     }
 
     // -------------------------------------------------- RANKS

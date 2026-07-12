@@ -120,7 +120,8 @@ function make_referral_code(string $whatsapp): string {
 }
 
 // -----------------------------------------------------------------------
-// 🧧 Red Envelope helpers (v2 – deposit-time single-use coupon)
+// 🧧 Red Envelope helpers (v2.1 – deposit-time single-use coupon,
+//     with PER-PACKAGE amounts)
 // -----------------------------------------------------------------------
 
 /** Master on/off flag. Feature is opt-in; disabled by default. */
@@ -128,47 +129,97 @@ function red_envelope_enabled(): bool {
     return setting('red_envelope_enabled') === '1';
 }
 
-/** 'fixed' (single amount for everyone) or 'random' (min-max range). */
+/** 'fixed' (per-package amounts) or 'random' (surprise from the pool). */
 function red_envelope_mode(): string {
     $m = (string) setting('red_envelope_mode', 'fixed');
     return $m === 'random' ? 'random' : 'fixed';
 }
 
 /**
- * The next amount that would be issued to a fresh claimant.  In fixed
- * mode this is a constant, in random mode it's picked uniformly from
- * [min, max].  Returns 0.0 when the feature is off or misconfigured.
+ * Per-package discount map, keyed by task_package.id → Rs amount.
+ * Stored as JSON in admin_settings.red_envelope_discounts.
+ *   { "2": 50, "3": 100, "4": 200, "5": 300, "6": 500 }
  */
-function red_envelope_next_amount(): float {
-    if (!red_envelope_enabled()) return 0.0;
-    if (red_envelope_mode() === 'random') {
-        $min = max(0.0, (float) setting('red_envelope_min', 0));
-        $max = max($min, (float) setting('red_envelope_max', $min));
-        if ($max <= 0) return 0.0;
-        // integer-precision picks so amounts read cleanly ("Rs 350")
-        $lo = (int) round($min);
-        $hi = (int) round($max);
-        return (float) ($lo === $hi ? $lo : mt_rand($lo, $hi));
-    }
-    return max(0.0, (float) setting('red_envelope_amount', 0));
+function red_envelope_discounts(): array {
+    $raw = (string) setting('red_envelope_discounts', '');
+    if ($raw === '') return [];
+    $j = json_decode($raw, true);
+    return is_array($j) ? $j : [];
 }
 
-/** Convenience wrapper for the "look how much you could win" preview. */
+/** Discount configured for a specific package id (0 if none). */
+function red_envelope_amount_for_package(int $packageId): float {
+    $m = red_envelope_discounts();
+    return max(0.0, (float)($m[(string)$packageId] ?? $m[$packageId] ?? 0));
+}
+
+/** Maximum amount across all configured packages (used for "up to Rs X"). */
+function red_envelope_max_amount(): float {
+    $vals = array_map('floatval', red_envelope_discounts());
+    $vals = array_filter($vals, fn($v) => $v > 0);
+    return $vals ? (float) max($vals) : 0.0;
+}
+
+/**
+ * Resolve WHAT amount to claim for a specific user, based on their
+ * current package state.
+ *  - No active package  → highest configured amount (marketing headline).
+ *  - Active package     → amount configured for the *next-tier* package,
+ *                          or 0 if user is already at the top tier.
+ *
+ * In random mode we pick uniformly from all non-zero configured amounts.
+ * Returns [amount, targetPackageId, targetPackageName, targetIsUpgrade].
+ */
+function red_envelope_target_for_user(int $uid): array {
+    if (!red_envelope_enabled()) return [0.0, 0, '', false];
+
+    $active = class_exists('TaskPackage') ? TaskPackage::activeForUser($uid) : null;
+
+    if (red_envelope_mode() === 'random') {
+        $vals = array_values(array_filter(array_map('floatval', red_envelope_discounts()), fn($v) => $v > 0));
+        if (!$vals) return [0.0, 0, '', false];
+        $amt = (float) $vals[array_rand($vals)];
+        return [$amt, 0, '', (bool)$active];
+    }
+
+    // Fixed / per-package mode
+    if (!$active) {
+        // No active package → headline max amount, no specific target
+        $amt = red_envelope_max_amount();
+        return [$amt, 0, 'first package', false];
+    }
+    // Find next-tier package (strictly higher price, still active)
+    $rows  = class_exists('TaskPackage') ? TaskPackage::active() : [];
+    $next  = null;
+    $curPr = (float)$active['price_paid'];
+    foreach ($rows as $p) {
+        if ((float)$p['price'] > $curPr) {
+            if ($next === null || (float)$p['price'] < (float)$next['price']) $next = $p;
+        }
+    }
+    if (!$next) return [0.0, 0, '', true]; // top tier already
+    $amt = red_envelope_amount_for_package((int)$next['id']);
+    return [$amt, (int)$next['id'], (string)$next['name'], true];
+}
+
+/**
+ * Headline amount used for pure marketing copy (used on the coupon
+ * before the user has clicked CLAIM).  Falls back to
+ * red_envelope_max_amount() if no user context is passed.
+ */
 function red_envelope_headline_amount(): float {
-    if (!red_envelope_enabled()) return 0.0;
-    if (red_envelope_mode() === 'random') {
-        return max(0.0, (float) setting('red_envelope_max', 0));
-    }
-    return max(0.0, (float) setting('red_envelope_amount', 0));
+    return red_envelope_max_amount();
 }
 
 // -----------------------------------------------------------------------
-// LEGACY helpers (v1 per-package-discount).  Kept so any dashboard tile
-// or view left over from the previous release does not throw.  Both
-// return 0 in v2 because the discount now applies at deposit time, not
-// at activation.
+// LEGACY helpers (v2 single-amount).  Kept as thin wrappers so any older
+// caller keeps working.
 // -----------------------------------------------------------------------
-function red_envelope_discounts(): array   { return []; }
+function red_envelope_next_amount(): float {
+    [$amt] = red_envelope_target_for_user(0);
+    if ($amt > 0) return $amt;
+    return max(0.0, red_envelope_max_amount());
+}
 function red_envelope_discount_for(int $uid, int $packageId): float { return 0.0; }
-function red_envelope_max_discount(): float { return red_envelope_headline_amount(); }
+function red_envelope_max_discount(): float { return red_envelope_max_amount(); }
 function red_envelope_pick_random(): float { return 0.0; }

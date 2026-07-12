@@ -164,44 +164,52 @@ document.querySelectorAll('[onclick*="pm-edit"]').forEach(b=>{
       </label>
       <div style="padding:10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.10)">
         <b>Discount mode</b>
-        <div class="small muted" style="margin-bottom:6px">Everyone gets the same amount (fixed), or a random surprise from a Rs range.</div>
-        <label style="margin-right:14px"><input type="radio" name="red_envelope_mode" value="fixed"  <?= $reMode==='fixed'  ? 'checked':'' ?> data-testid="re-mode-fixed">  Fixed amount</label>
-        <label><input type="radio" name="red_envelope_mode" value="random" <?= $reMode==='random' ? 'checked':'' ?> data-testid="re-mode-random"> Random (min–max)</label>
+        <div class="small muted" style="margin-bottom:6px">Fixed = each package has its own amount. Random = surprise picked from the pool below.</div>
+        <label style="margin-right:14px"><input type="radio" name="red_envelope_mode" value="fixed"  <?= $reMode==='fixed'  ? 'checked':'' ?> data-testid="re-mode-fixed">  Fixed per package</label>
+        <label><input type="radio" name="red_envelope_mode" value="random" <?= $reMode==='random' ? 'checked':'' ?> data-testid="re-mode-random"> Random surprise</label>
       </div>
     </div>
 
-    <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
-      <div>
-        <label>Fixed amount (Rs)</label>
-        <input class="input" type="number" min="0" step="1" name="red_envelope_amount"
-               value="<?= (float)$reAmount > 0 ? number_format((float)$reAmount, 0, '.', '') : '' ?>"
-               placeholder="e.g. 500"
-               data-testid="re-amount">
-        <div class="small muted" style="margin-top:4px">Used when mode = <b>Fixed</b>.</div>
-      </div>
-      <div>
-        <label>Random — minimum (Rs)</label>
-        <input class="input" type="number" min="0" step="1" name="red_envelope_min"
-               value="<?= (float)$reMin > 0 ? number_format((float)$reMin, 0, '.', '') : '' ?>"
-               placeholder="e.g. 100"
-               data-testid="re-min">
-      </div>
-      <div>
-        <label>Random — maximum (Rs)</label>
-        <input class="input" type="number" min="0" step="1" name="red_envelope_max"
-               value="<?= (float)$reMax > 0 ? number_format((float)$reMax, 0, '.', '') : '' ?>"
-               placeholder="e.g. 500"
-               data-testid="re-max">
-      </div>
+    <h4 style="margin:16px 0 8px;font-size:14px">Per-package discount amounts (PKR)</h4>
+    <div class="small muted" style="margin-bottom:8px">
+      Enter <b>0</b> or leave blank to skip a package. In <b>random</b> mode these amounts form the pool the surprise is picked from.
     </div>
+    <table class="table" style="margin-bottom:12px">
+      <thead><tr><th style="width:60%">Package</th><th>Discount (Rs)</th></tr></thead>
+      <tbody>
+      <?php if (empty($rePackages)): ?>
+        <tr><td colspan="2" class="empty">No packages configured yet.</td></tr>
+      <?php else: foreach ($rePackages as $rp):
+        $amt = (float)($reMap[(string)$rp['id']] ?? $reMap[$rp['id']] ?? 0);
+      ?>
+        <tr>
+          <td>
+            <b><?= e($rp['name']) ?></b>
+            <span class="small muted"> · <?= e(strtoupper($rp['tier'] ?: 'standard')) ?> · List price <?= money($rp['price']) ?></span>
+          </td>
+          <td>
+            <input class="input" type="number" min="0" step="1"
+                   name="red_envelope_amounts[<?= (int)$rp['id'] ?>]"
+                   value="<?= $amt > 0 ? number_format($amt, 0, '.', '') : '' ?>"
+                   placeholder="0"
+                   data-testid="re-amount-<?= (int)$rp['id'] ?>"
+                   style="max-width:180px">
+          </td>
+        </tr>
+      <?php endforeach; endif; ?>
+      </tbody>
+    </table>
 
-    <div class="small muted" style="margin-top:12px;padding:10px 12px;border-radius:10px;
+    <div class="small muted" style="margin:8px 0 12px;padding:10px 12px;border-radius:10px;
                                     background:rgba(62,182,255,.06);border:1px solid rgba(62,182,255,.20)">
       <i class="fa-solid fa-circle-info" style="color:#3eb6ff"></i>
-      To issue a new envelope to a specific user (e.g. after they used their first one), open <b>Users → Manage</b> and click <b>"Issue New Envelope"</b>.
+      <b>How it decides the amount:</b>
+      Users with <b>no active package</b> see "Up to Rs X off" (the highest amount above).
+      Users <b>with an active package</b> see "Get Rs Y off when you upgrade to [next tier]" (the amount configured for that next tier).
+      The discount is applied at <b>deposit time</b>. Wallet is credited the full deposit amount on approval.
     </div>
 
-    <button class="btn inline" type="submit" style="margin-top:12px" data-testid="re-save">
+    <button class="btn inline" type="submit" data-testid="re-save">
       <i class="fa-solid fa-floppy-disk"></i> Save Red Envelope settings
     </button>
   </form>

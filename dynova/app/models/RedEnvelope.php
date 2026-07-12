@@ -74,14 +74,21 @@ class RedEnvelope
      * Try to grant a new claim to a user.  Returns the claim row on
      * success, null if the user is not eligible (feature disabled, no
      * amount configured, or user already claimed once).
+     *
+     * If `$amount` is provided (> 0) it is used verbatim — this lets the
+     * caller decide the value based on the user's current package (e.g.
+     * "upgrade to Gold" → the amount configured for Gold).  Otherwise
+     * the default helper is used.
      */
-    public static function claim(int $uid): ?array
+    public static function claim(int $uid, ?float $amount = null): ?array
     {
         self::ensureSchema();
         if (!red_envelope_enabled())        return null;
         if (self::hasEverClaimed($uid))     return self::activeClaim($uid); // idempotent
-        $amount = red_envelope_next_amount();
-        if ($amount <= 0)                    return null;
+        if ($amount === null || $amount <= 0) {
+            [$amount] = red_envelope_target_for_user($uid);
+        }
+        if ($amount <= 0)                   return null;
         db()->prepare("INSERT INTO red_envelope_claims (user_id, amount) VALUES (?, ?)")
             ->execute([$uid, $amount]);
         return self::activeClaim($uid);
@@ -116,12 +123,15 @@ class RedEnvelope
      * Admin action: force-issue a new envelope even if the user has
      * already claimed one before.  Uses the current configured amount.
      */
-    public static function grantForUser(int $uid): ?array
+    public static function grantForUser(int $uid, ?float $amount = null): ?array
     {
         self::ensureSchema();
         // Revoke any existing unused envelope first
         self::resetForUser($uid);
-        $amount = red_envelope_next_amount();
+        if ($amount === null || $amount <= 0) {
+            [$amount] = red_envelope_target_for_user($uid);
+            if ($amount <= 0) $amount = red_envelope_max_amount();
+        }
         if ($amount <= 0) return null;
         db()->prepare("INSERT INTO red_envelope_claims (user_id, amount) VALUES (?, ?)")
             ->execute([$uid, $amount]);
