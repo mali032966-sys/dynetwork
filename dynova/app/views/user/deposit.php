@@ -25,6 +25,16 @@
 
 <?php if ($step === 1): ?>
   <!-- =================== STEP 1: amount + method =================== -->
+
+  <?php if (!empty($envelopeClaim) && (float)$envelopeAmt > 0): ?>
+    <div class="card stagger re-banner" data-testid="deposit-re-banner">
+      <div class="re-banner-ic"><i class="fa-solid fa-gift"></i></div>
+      <div class="re-banner-body">
+        <b>🧧 Red Envelope active — <?= money($envelopeAmt) ?> off this deposit</b>
+        <div class="small muted">You'll pay <b style="color:#ffd54a">(your deposit amount − <?= money($envelopeAmt) ?>)</b>. Your wallet will still be credited the <b>full amount</b> once admin approves.</div>
+      </div>
+    </div>
+  <?php endif; ?>
   <form method="post" class="card stagger" data-testid="deposit-step-1">
     <?= csrf_field() ?>
     <input type="hidden" name="step" value="1">
@@ -87,11 +97,21 @@
 <?php elseif ($step === 2): ?>
   <!-- =================== STEP 2: show payment details =================== -->
   <div class="card stagger" data-testid="deposit-step-2">
+    <?php $eff = (float)$payAmount; $env = (float)$envelopeAmt; $wallet = (float)$wizard['amount']; ?>
     <h3 style="margin:0 0 4px;font-size:16px">Send Payment</h3>
     <div class="small muted" style="margin-bottom:14px">
-      Send <b style="color:var(--cyan)"><?= money($wizard['amount']) ?></b> via
+      Send <b style="color:var(--cyan)"><?= money($eff) ?></b> via
       <b style="color:var(--cyan)"><?= e($wizard['method']) ?></b> to the account below.
     </div>
+
+    <?php if ($env > 0): ?>
+      <div class="re-summary" data-testid="deposit-re-summary">
+        <div class="re-summary-row"><span>Requested deposit</span><b><?= money($wallet) ?></b></div>
+        <div class="re-summary-row"><span>🧧 Red Envelope discount</span><b style="color:#ffd54a">−<?= money($env) ?></b></div>
+        <div class="re-summary-row big"><span>You pay now</span><b><?= money($eff) ?></b></div>
+        <div class="re-summary-row"><span>Wallet will receive</span><b style="color:#10b981"><?= money($wallet) ?></b></div>
+      </div>
+    <?php endif; ?>
 
     <?php if ($selected): ?>
       <div class="pm-detail" data-testid="pm-detail">
@@ -115,8 +135,13 @@
         </div>
 
         <div class="amount-box">
-          <div class="small muted">Amount to send</div>
-          <div class="amount-big" data-testid="pm-amount-display"><?= money($wizard['amount']) ?></div>
+          <div class="small muted">Amount to send<?= $env > 0 ? ' (after Red Envelope discount)' : '' ?></div>
+          <div class="amount-big" data-testid="pm-amount-display"><?= money($eff) ?></div>
+          <?php if ($env > 0): ?>
+            <div class="small muted" style="margin-top:6px">
+              <s><?= money($wallet) ?></s> · you save <?= money($env) ?>
+            </div>
+          <?php endif; ?>
         </div>
 
         <?php if (!empty($selected['instructions'])): ?>
@@ -131,7 +156,7 @@
         <ol class="howto" data-testid="howto-list">
           <li>Open your <b><?= e($selected['name']) ?></b> mobile app.</li>
           <li>Choose <b>Send Money</b> and paste the account number above.</li>
-          <li>Enter the exact amount: <b><?= money($wizard['amount']) ?></b></li>
+          <li>Enter the exact amount: <b><?= money($eff) ?></b><?= $env > 0 ? ' <span class="small muted">(discounted from '.money($wallet).')</span>' : '' ?></li>
           <li>Complete the transaction and <b>save the Transaction ID (TID)</b> from the confirmation SMS.</li>
           <li>Take a screenshot of the success page — you'll upload it in the next step.</li>
         </ol>
@@ -159,7 +184,12 @@
     <input type="hidden" name="step" value="3">
     <h3 style="margin:0 0 4px;font-size:16px">Submit Proof of Payment</h3>
     <div class="small muted" style="margin-bottom:14px">
-      Paid <b style="color:var(--cyan)"><?= money($wizard['amount']) ?></b> via <b><?= e($wizard['method']) ?></b>?
+      Paid <b style="color:var(--cyan)"><?= money($payAmount ?? $wizard['amount']) ?></b> via <b><?= e($wizard['method']) ?></b>?
+      <?php if (!empty($envelopeAmt) && (float)$envelopeAmt > 0): ?>
+        <br><span class="small" style="color:#ffd54a">
+          🧧 Your wallet will be credited the full <b><?= money($wizard['amount']) ?></b> once admin approves.
+        </span>
+      <?php endif; ?>
       Enter the TID and upload the screenshot.
     </div>
 
@@ -236,3 +266,35 @@
   </div>
 <?php endforeach; endif; ?>
 </div>
+
+<style>
+/* 🧧 Red Envelope banner + summary on the deposit page */
+.re-banner{
+  display:flex; gap:12px; align-items:center;
+  padding:12px 14px; margin-bottom:12px;
+  background:linear-gradient(120deg, rgba(255,91,106,.14), rgba(255,181,71,.06));
+  border:1px solid rgba(255,91,106,.35);
+}
+.re-banner-ic{
+  width:38px; height:38px; border-radius:12px; flex-shrink:0;
+  display:grid; place-items:center; color:#fff; font-size:16px;
+  background:linear-gradient(135deg, #ff5b6a, #c81f34);
+}
+.re-banner-body{ flex:1; min-width:0; line-height:1.5; }
+.re-summary{
+  padding:14px 16px; margin:-4px 0 14px;
+  background:linear-gradient(160deg, rgba(255,91,106,.09), rgba(255,181,71,.05));
+  border:1px dashed rgba(255,181,71,.45); border-radius:14px;
+}
+.re-summary-row{
+  display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+  padding:6px 0; font-size:13.5px; color:var(--txt-mute, #cbd5e1);
+}
+.re-summary-row b{ color:#fff; font-size:14px; }
+.re-summary-row + .re-summary-row{ border-top:1px solid rgba(255,255,255,.05); }
+.re-summary-row.big{ font-size:15px; }
+.re-summary-row.big b{ font-size:20px; color:#ffd54a; }
+@media (max-width:520px){
+  .re-summary-row.big b{ font-size:18px; }
+}
+</style>

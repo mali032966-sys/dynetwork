@@ -114,14 +114,24 @@ class WalletController {
                 }
 
                 if (!$errors) {
-                    Deposit::create([
+                    $depId = Deposit::create([
                         'user_id'        => (int)$u['id'],
                         'amount'         => (float)$wizard['amount'],
                         'method'         => $wizard['method'],
                         'transaction_id' => $txid,
                         'sender_account' => $sender,
                         'screenshot'     => $screenshotPath,
+                        // 🧧 Red Envelope: attach the currently-active claim
+                        //    so admin approval credits the FULL amount but
+                        //    the user only paid (amount - envelope_used).
+                        'envelope_used'  => (float)($wizard['envelope'] ?? 0),
                     ]);
+                    // Close the claim now so the user cannot double-spend it
+                    // on multiple simultaneous deposit requests.
+                    $claimId = (int)($wizard['envelope_claim_id'] ?? 0);
+                    if ($claimId > 0 && !empty($wizard['envelope'])) {
+                        RedEnvelope::markUsed($claimId, $depId);
+                    }
                     unset($_SESSION['dep_wizard']);
                     flash_set('success', 'Deposit request submitted. Pending admin approval.');
                     redirect('wallet');
@@ -133,6 +143,20 @@ class WalletController {
         if ($step > 1 && (empty($wizard['amount']) || empty($wizard['method']))) {
             redirect('wallet/deposit', ['step' => 1]);
         }
+
+        // 🧧 Red Envelope — active claim (if any) drives the discount preview
+        //    on step 1 and the "amount to pay" on steps 2/3.
+        $envelopeClaim = RedEnvelope::activeClaim((int)$u['id']);
+        $envelopeAmt   = $envelopeClaim ? (float)$envelopeClaim['amount'] : 0.0;
+        // Persist it into the wizard so the discount is remembered across
+        // steps and gets locked into the deposit row on submit.
+        if ($envelopeClaim && !empty($wizard['amount'])) {
+            $_SESSION['dep_wizard']['envelope']          = $envelopeAmt;
+            $_SESSION['dep_wizard']['envelope_claim_id'] = (int)$envelopeClaim['id'];
+            $wizard = $_SESSION['dep_wizard'];
+        }
+        // Effective amount user actually pays for this deposit.
+        $payAmount = max(0.0, (float)($wizard['amount'] ?? 0) - $envelopeAmt);
 
         // Look up the selected method for steps 2/3.  We prefer the stored
         // method_id (stable across renames / re-orders); fall back to a
@@ -160,7 +184,7 @@ class WalletController {
         }
 
         $history = Deposit::forUser((int)$u['id']);
-        view('user/deposit', compact('u','methods','errors','history','step','wizard','selected'), 'app');
+        view('user/deposit', compact('u','methods','errors','history','step','wizard','selected','envelopeClaim','envelopeAmt','payAmount'), 'app');
     }
 
     public function withdraw(): void {

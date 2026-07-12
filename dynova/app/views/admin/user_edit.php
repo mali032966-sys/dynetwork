@@ -49,6 +49,75 @@
   </table>
 </div>
 
+<!-- 🧧 Red Envelope status + admin controls -->
+<div class="card" style="margin-top:18px" data-testid="user-envelope-card">
+  <h3 style="margin:0 0 10px">
+    <i class="fa-solid fa-gift" style="color:#ff5b6a"></i> Red Envelope
+  </h3>
+  <?php $reClaim = $reClaim ?? null; $reHistory = $reHistory ?? []; ?>
+  <?php if ($reClaim): ?>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 14px;
+                background:linear-gradient(120deg,rgba(255,91,106,.14),rgba(255,181,71,.06));
+                border:1px solid rgba(255,91,106,.35);border-radius:12px;margin-bottom:12px">
+      <div>
+        <div class="small muted">Active claim (unused)</div>
+        <div style="font-size:20px;font-weight:800;color:#ffd54a" data-testid="user-re-active-amount">
+          <?= money($reClaim['amount']) ?>
+        </div>
+      </div>
+      <div class="small muted" style="flex:1;min-width:180px">
+        Claimed on <?= e(date('M d, Y H:i', strtotime($reClaim['claimed_at']))) ?>. Will be applied to the next approved deposit.
+      </div>
+    </div>
+  <?php else: ?>
+    <div class="empty" style="margin-bottom:10px">No active envelope for this user.</div>
+  <?php endif; ?>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+    <form method="post" style="display:inline">
+      <?= csrf_field() ?>
+      <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+      <button class="btn sm" name="action" value="re_grant" data-testid="user-re-grant">
+        <i class="fa-solid fa-plus"></i> Issue new envelope
+      </button>
+    </form>
+    <?php if ($reClaim): ?>
+      <form method="post" style="display:inline" onsubmit="return confirm('Revoke this user\'s active envelope?');">
+        <?= csrf_field() ?>
+        <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
+        <button class="btn sm ghost danger" name="action" value="re_reset" data-testid="user-re-reset">
+          <i class="fa-solid fa-ban"></i> Revoke
+        </button>
+      </form>
+    <?php endif; ?>
+  </div>
+
+  <?php if (!empty($reHistory)): ?>
+    <details style="margin-top:6px">
+      <summary class="small muted" style="cursor:pointer">History (<?= count($reHistory) ?>)</summary>
+      <table class="table" style="margin-top:8px">
+        <thead><tr><th>Amount</th><th>Status</th><th>Claimed</th><th>Used</th><th>Deposit</th></tr></thead>
+        <tbody>
+          <?php foreach ($reHistory as $h): ?>
+            <tr>
+              <td><?= money($h['amount']) ?></td>
+              <td>
+                <?php $st = strtolower($h['status']); ?>
+                <?php if ($st === 'used'): ?><span class="badge approved">Used</span>
+                <?php elseif ($st === 'revoked'): ?><span class="badge rejected">Revoked</span>
+                <?php else: ?><span class="badge pending">Unused</span><?php endif; ?>
+              </td>
+              <td class="small muted"><?= e(date('M d, H:i', strtotime($h['claimed_at']))) ?></td>
+              <td class="small muted"><?= $h['used_at'] ? e(date('M d, H:i', strtotime($h['used_at']))) : '—' ?></td>
+              <td class="small muted"><?= $h['deposit_id'] ? '#'.(int)$h['deposit_id'] : '—' ?></td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </details>
+  <?php endif; ?>
+</div>
+
 <!-- 📦 Package History (activation + pro-rata upgrades) -->
 <div class="card" style="margin-top:18px" data-testid="user-package-history">
   <h3 style="margin:0 0 12px"><i class="fa-solid fa-box-open"></i> Package History</h3>

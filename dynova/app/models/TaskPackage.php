@@ -181,12 +181,11 @@ class TaskPackage {
         $u = User::find($uid);
         if (!$u) return ['ok' => false, 'error' => 'User not found.'];
 
-        // ---- Red Envelope discount (applies only on fresh activation, not
-        //      on package upgrades — upgrades already benefit from the
-        //      pro-rata reduction).
-        $listPrice = (float) $pkg['price'];
-        $discount  = red_envelope_discount_for($uid, $packageId);
-        $finalPrice = max(0.0, $listPrice - $discount);
+        // Red Envelope discounts are now applied at DEPOSIT time, not on
+        // activation.  The user's wallet already carries the full amount
+        // they are expected to spend, so activation simply debits the
+        // package list price.
+        $finalPrice = (float) $pkg['price'];
 
         if ((float) $u['balance'] < $finalPrice) {
             return ['ok' => false, 'error' =>
@@ -202,18 +201,6 @@ class TaskPackage {
                     $uid, 'admin_adjust', -1 * $finalPrice,
                     'Activated package: ' . $pkg['name']
                 );
-            }
-            if ($discount > 0) {
-                // A zero-amount audit line so the discount is visible in the
-                // user's ledger (no balance change — user was simply charged less).
-                Transaction::log(
-                    $uid, 'admin_adjust', 0,
-                    '🧧 Red Envelope discount: ' . money($discount) . ' off ' . $pkg['name']
-                );
-                // Consume any random-mode session pick so it can't be reused.
-                if (!empty($_SESSION['red_envelope_picked'])) {
-                    unset($_SESSION['red_envelope_picked']);
-                }
             }
             $expires = date('Y-m-d H:i:s', time() + ((int) $pkg['validity_days']) * 86400);
             $pdo->prepare(
@@ -235,7 +222,7 @@ class TaskPackage {
             } catch (Throwable $e) {
                 // Don't fail the activation if bonus crediting fails.
             }
-            return ['ok' => true, 'expires' => $expires, 'paid' => $finalPrice, 'discount' => $discount];
+            return ['ok' => true, 'expires' => $expires, 'paid' => $finalPrice, 'discount' => 0.0];
         } catch (Throwable $e) {
             $pdo->rollBack();
             return ['ok' => false, 'error' => 'Activation failed: ' . $e->getMessage()];
@@ -298,9 +285,11 @@ class TaskPackage {
         if ($newPrice <= $oldPrice) {
             return ['ok' => false, 'error' => 'You can only upgrade to a higher-priced package.'];
         }
+        // Pure pro-rata: pay the price difference.  Red Envelope discounts
+        // are applied at deposit time (v2), not on upgrades.
         $diff     = $newPrice - $oldPrice;
-        $discount = red_envelope_discount_for($uid, $newPackageId);
-        $cost     = max(0.0, $diff - $discount);
+        $cost     = $diff;
+        $discount = 0.0;
 
         if ((float) $u['balance'] < $cost) {
             return ['ok' => false, 'error' =>
@@ -316,15 +305,6 @@ class TaskPackage {
                     $uid, 'admin_adjust', -1 * $cost,
                     'Package upgrade to ' . $newPkg['name'] . ' (pro-rata: pay difference)'
                 );
-            }
-            if ($discount > 0) {
-                Transaction::log(
-                    $uid, 'admin_adjust', 0,
-                    '🧧 Red Envelope discount on upgrade: ' . money($discount) . ' off ' . $newPkg['name']
-                );
-                if (!empty($_SESSION['red_envelope_picked'])) {
-                    unset($_SESSION['red_envelope_picked']);
-                }
             }
             // Mark the old active row as expired + stamp upgrade time
             $pdo->prepare(

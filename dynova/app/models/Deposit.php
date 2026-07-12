@@ -1,12 +1,16 @@
 <?php
 class Deposit {
     public static function create(array $d): int {
+        // Make sure `envelope_used` column exists before we try to write to it.
+        RedEnvelope::ensureSchema();
         $s = db()->prepare(
-            'INSERT INTO deposits (user_id, amount, method, transaction_id, sender_account, screenshot, status)
-             VALUES (?,?,?,?,?,?,"pending")'
+            'INSERT INTO deposits (user_id, amount, envelope_used, method, transaction_id, sender_account, screenshot, status)
+             VALUES (?,?,?,?,?,?,?,"pending")'
         );
         $s->execute([
-            $d['user_id'], $d['amount'], $d['method'],
+            $d['user_id'], $d['amount'],
+            (float)($d['envelope_used'] ?? 0),
+            $d['method'],
             $d['transaction_id'], $d['sender_account'] ?? null,
             $d['screenshot'] ?? null,
         ]);

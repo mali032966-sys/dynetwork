@@ -173,12 +173,22 @@ class AdminController {
                     Transaction::log($id, 'admin_adjust', $amt, $note ?: 'Admin balance adjust');
                     flash_set('success','Balance adjusted by ' . money($amt));
                 }
+            } elseif ($action === 're_grant') {
+                // 🧧 Force-issue a new Red Envelope (revokes any unused one)
+                $c = RedEnvelope::grantForUser($id);
+                if ($c) flash_set('success', 'New Red Envelope issued: ' . money($c['amount']));
+                else    flash_set('error',   'Could not issue envelope — check that the feature is enabled and an amount is configured.');
+            } elseif ($action === 're_reset') {
+                RedEnvelope::resetForUser($id);
+                flash_set('success', 'Active Red Envelope revoked.');
             }
             redirect('admin/users/edit', ['id' => $id]);
         }
         $tx = Transaction::forUser($id, 30);
-        $pkgHistory = TaskPackage::historyForUser($id);
-        view('admin/user_edit', compact('u','tx','pkgHistory'), 'admin');
+        $pkgHistory  = TaskPackage::historyForUser($id);
+        $reClaim     = RedEnvelope::activeClaim($id);
+        $reHistory   = RedEnvelope::historyForUser($id);
+        view('admin/user_edit', compact('u','tx','pkgHistory','reClaim','reHistory'), 'admin');
     }
 
     // -------------------------------------------------- DEPOSITS
@@ -191,9 +201,20 @@ class AdminController {
             if ($d && $d['status'] === 'pending') {
                 if ($act === 'approve') {
                     Deposit::setStatus($id, 'approved', $_POST['note'] ?? null);
-                    User::addBalance((int)$d['user_id'], (float)$d['amount'], 'balance');
-                    User::addBalance((int)$d['user_id'], (float)$d['amount'], 'deposit_total');
-                    Transaction::log((int)$d['user_id'], 'deposit', (float)$d['amount'], 'Deposit via ' . $d['method']);
+                    $amount   = (float)$d['amount'];
+                    $envelope = (float)($d['envelope_used'] ?? 0);
+                    User::addBalance((int)$d['user_id'], $amount, 'balance');
+                    User::addBalance((int)$d['user_id'], $amount, 'deposit_total');
+                    Transaction::log((int)$d['user_id'], 'deposit', $amount, 'Deposit via ' . $d['method']);
+                    if ($envelope > 0) {
+                        // Log a zero-amount audit line so the discount is
+                        // visible in the user's ledger (they didn't PAY
+                        // this — the platform absorbed it).
+                        Transaction::log(
+                            (int)$d['user_id'], 'admin_adjust', 0,
+                            '🧧 Red Envelope applied at deposit: ' . money($envelope) . ' saved'
+                        );
+                    }
                     flash_set('success','Deposit approved.');
                 } elseif ($act === 'reject') {
                     Deposit::setStatus($id, 'rejected', $_POST['note'] ?? null);
@@ -339,20 +360,17 @@ class AdminController {
                 PaymentMethod::delete((int)$_POST['id']);
                 flash_set('success','Payment method deleted.');
             } elseif ($section === 'red_envelope') {
-                // 🧧 Red Envelope surprise-discount configuration
+                // 🧧 Red Envelope v2 — single-use coupon, deposit-time discount.
                 $enabled = isset($_POST['red_envelope_enabled']) ? '1' : '0';
                 $mode    = ($_POST['red_envelope_mode'] ?? 'fixed') === 'random' ? 'random' : 'fixed';
-                // Build the JSON map from the per-package inputs (indexed by
-                // task_package.id). Only positive numbers are stored.
-                $map = [];
-                foreach ((array)($_POST['red_envelope_amounts'] ?? []) as $pid => $amt) {
-                    $pid = (int)$pid;
-                    $amt = (float)$amt;
-                    if ($pid > 0 && $amt > 0) $map[(string)$pid] = round($amt, 2);
-                }
+                $amount  = max(0.0, (float)($_POST['red_envelope_amount'] ?? 0));
+                $rmin    = max(0.0, (float)($_POST['red_envelope_min']    ?? 0));
+                $rmax    = max($rmin, (float)($_POST['red_envelope_max']  ?? 0));
                 setting_set('red_envelope_enabled', $enabled);
-                setting_set('red_envelope_mode', $mode);
-                setting_set('red_envelope_discounts', json_encode($map));
+                setting_set('red_envelope_mode',    $mode);
+                setting_set('red_envelope_amount',  (string)$amount);
+                setting_set('red_envelope_min',     (string)$rmin);
+                setting_set('red_envelope_max',     (string)$rmax);
                 flash_set('success', 'Red Envelope settings updated.');
             } elseif ($section === 'admin_password') {
                 // Admin self-service password change. Requires the current
@@ -392,12 +410,13 @@ class AdminController {
             'site_name'        => setting('site_name', APP_NAME),
             'site_tagline'     => setting('site_tagline', 'Rate. Earn. Refer.'),
         ];
-        // 🧧 Red Envelope config for the settings section
-        $rePackages = TaskPackage::all();
-        $reEnabled  = red_envelope_enabled();
-        $reMode     = red_envelope_mode();
-        $reMap      = red_envelope_discounts();
-        view('admin/settings', compact('values','methods','rePackages','reEnabled','reMode','reMap'), 'admin');
+        // 🧧 Red Envelope v2 config
+        $reEnabled = red_envelope_enabled();
+        $reMode    = red_envelope_mode();
+        $reAmount  = (float) setting('red_envelope_amount', 0);
+        $reMin     = (float) setting('red_envelope_min', 0);
+        $reMax     = (float) setting('red_envelope_max', 0);
+        view('admin/settings', compact('values','methods','reEnabled','reMode','reAmount','reMin','reMax'), 'admin');
     }
 
     // -------------------------------------------------- RANKS

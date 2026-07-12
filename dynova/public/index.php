@@ -74,6 +74,15 @@ try {
             (new WalletController())->index(); break;
         case $route === 'wallet/deposit':
             (new WalletController())->deposit(); break;
+        case $route === 'wallet/red-envelope-claim':
+            // 🧧 User taps CLAIM on the dashboard coupon → grant a claim,
+            //    then send them back to the dashboard where the fresh-claim
+            //    popup fires once.
+            $u = require_user();
+            RedEnvelope::claim((int)$u['id']);
+            unset($_SESSION['re_popup_seen']);
+            redirect('dashboard');
+            break;
         case $route === 'wallet/withdraw':
             (new WalletController())->withdraw(); break;
         case $route === 'profile':
