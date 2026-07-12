@@ -203,12 +203,33 @@ function red_envelope_target_for_user(int $uid): array {
 }
 
 /**
- * Headline amount used for pure marketing copy (used on the coupon
- * before the user has clicked CLAIM).  Falls back to
- * red_envelope_max_amount() if no user context is passed.
+ * Look up the discount that applies when a user requests a deposit
+ * of `$amount`.  The rule: deposit amount must EXACTLY equal the list
+ * price of one of the configured task packages, in which case the
+ * discount for that package (from the per-package JSON map) is
+ * returned.  Any other amount → no discount.
+ *
+ * Returns [discount, packageName]  or  [0.0, ''] if no match.
  */
-function red_envelope_headline_amount(): float {
-    return red_envelope_max_amount();
+function red_envelope_discount_for_amount(float $amount): array {
+    if (!red_envelope_enabled() || $amount <= 0) return [0.0, ''];
+    if (!class_exists('TaskPackage')) return [0.0, ''];
+    $map = red_envelope_discounts();
+    if (!$map) return [0.0, ''];
+    foreach (TaskPackage::active() as $p) {
+        if ((float)$p['price'] === (float)$amount) {
+            $d = (float)($map[(string)$p['id']] ?? $map[$p['id']] ?? 0);
+            if ($d > 0) return [$d, (string)$p['name']];
+        }
+    }
+    return [0.0, ''];
+}
+
+/** Minimum configured discount across all packages (for the "Rs X–Y off" range). */
+function red_envelope_min_amount(): float {
+    $vals = array_map('floatval', red_envelope_discounts());
+    $vals = array_filter($vals, fn($v) => $v > 0);
+    return $vals ? (float) min($vals) : 0.0;
 }
 
 // -----------------------------------------------------------------------

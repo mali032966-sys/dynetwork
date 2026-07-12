@@ -72,25 +72,25 @@ class RedEnvelope
 
     /**
      * Try to grant a new claim to a user.  Returns the claim row on
-     * success, null if the user is not eligible (feature disabled, no
-     * amount configured, or user already claimed once).
+     * success, null if the user is not eligible.
      *
-     * If `$amount` is provided (> 0) it is used verbatim — this lets the
-     * caller decide the value based on the user's current package (e.g.
-     * "upgrade to Gold" → the amount configured for Gold).  Otherwise
-     * the default helper is used.
+     * v2.2: the claim is a pure ELIGIBILITY flag — the actual discount
+     * amount is computed at DEPOSIT time based on which package price
+     * the user requests.  Passing `$amount` is still supported for
+     * back-compat (used by admin "Issue new envelope" so the history
+     * shows a promised amount), but the deposit flow re-computes.
      */
     public static function claim(int $uid, ?float $amount = null): ?array
     {
         self::ensureSchema();
         if (!red_envelope_enabled())        return null;
         if (self::hasEverClaimed($uid))     return self::activeClaim($uid); // idempotent
-        if ($amount === null || $amount <= 0) {
-            [$amount] = red_envelope_target_for_user($uid);
-        }
-        if ($amount <= 0)                   return null;
+        // Grant only if the feature has SOMETHING configured — otherwise
+        // the coupon would be a promise we can't fulfil.
+        if (red_envelope_max_amount() <= 0) return null;
+        $stored = ($amount !== null && $amount > 0) ? $amount : 0.0;
         db()->prepare("INSERT INTO red_envelope_claims (user_id, amount) VALUES (?, ?)")
-            ->execute([$uid, $amount]);
+            ->execute([$uid, $stored]);
         return self::activeClaim($uid);
     }
 

@@ -144,13 +144,15 @@ class WalletController {
             redirect('wallet/deposit', ['step' => 1]);
         }
 
-        // 🧧 Red Envelope — active claim (if any) drives the discount preview
-        //    on step 1 and the "amount to pay" on steps 2/3.
+        // 🧧 Red Envelope — v2.2: the discount is looked up FRESH at
+        //    deposit time based on the deposit amount matching a
+        //    package's list price.  The claim table is used only as an
+        //    eligibility flag (one-time-per-user unlock).
         $envelopeClaim = RedEnvelope::activeClaim((int)$u['id']);
-        $envelopeAmt   = $envelopeClaim ? (float)$envelopeClaim['amount'] : 0.0;
-        // Persist it into the wizard so the discount is remembered across
-        // steps and gets locked into the deposit row on submit.
+        $envelopeAmt   = 0.0;
+        $envelopeName  = '';
         if ($envelopeClaim && !empty($wizard['amount'])) {
+            [$envelopeAmt, $envelopeName] = red_envelope_discount_for_amount((float)$wizard['amount']);
             $_SESSION['dep_wizard']['envelope']          = $envelopeAmt;
             $_SESSION['dep_wizard']['envelope_claim_id'] = (int)$envelopeClaim['id'];
             $wizard = $_SESSION['dep_wizard'];
@@ -184,7 +186,7 @@ class WalletController {
         }
 
         $history = Deposit::forUser((int)$u['id']);
-        view('user/deposit', compact('u','methods','errors','history','step','wizard','selected','envelopeClaim','envelopeAmt','payAmount'), 'app');
+        view('user/deposit', compact('u','methods','errors','history','step','wizard','selected','envelopeClaim','envelopeAmt','envelopeName','payAmount'), 'app');
     }
 
     public function withdraw(): void {
@@ -227,6 +229,20 @@ class WalletController {
             // again and again as long as this is true.
             if ($amount > (float)$u['balance']) {
                 $errors[] = 'Insufficient balance for the selected amount.';
+            }
+
+            // Once-per-day rule: users may only submit ONE withdrawal
+            // request per calendar day (server time).  Prevents spam and
+            // gives operators a clear 24-hour cadence.
+            if (!$errors) {
+                $todayCountStmt = db()->prepare(
+                    'SELECT COUNT(*) FROM withdrawals
+                      WHERE user_id = ? AND DATE(created_at) = CURDATE()'
+                );
+                $todayCountStmt->execute([(int)$u['id']]);
+                if ((int)$todayCountStmt->fetchColumn() > 0) {
+                    $errors[] = 'You have already submitted a withdrawal today. Please try again tomorrow.';
+                }
             }
             if (!$method) $errors[] = 'Please select a payment method.';
             if (!$accNum || !$accTit) $errors[] = 'Account details are required.';

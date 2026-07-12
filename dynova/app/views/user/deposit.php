@@ -26,12 +26,33 @@
 <?php if ($step === 1): ?>
   <!-- =================== STEP 1: amount + method =================== -->
 
-  <?php if (!empty($envelopeClaim) && (float)$envelopeAmt > 0): ?>
+  <?php if (!empty($envelopeClaim)): ?>
     <div class="card stagger re-banner" data-testid="deposit-re-banner">
       <div class="re-banner-ic"><i class="fa-solid fa-gift"></i></div>
       <div class="re-banner-body">
-        <b>🧧 Red Envelope active — <?= money($envelopeAmt) ?> off this deposit</b>
-        <div class="small muted">You'll pay <b style="color:#ffd54a">(your deposit amount − <?= money($envelopeAmt) ?>)</b>. Your wallet will still be credited the <b>full amount</b> once admin approves.</div>
+        <?php if ((float)$envelopeAmt > 0): ?>
+          <b>🧧 Red Envelope active — <?= money($envelopeAmt) ?> off this deposit
+             <?php if (!empty($envelopeName)): ?> <span class="small muted">(<?= e($envelopeName) ?> tier)</span><?php endif; ?>
+          </b>
+          <div class="small muted">You'll pay <b style="color:#ffd54a"><?= money(max(0.0, (float)($wizard['amount'] ?? 0) - (float)$envelopeAmt)) ?></b>. Your wallet will still be credited the <b>full <?= money((float)($wizard['amount'] ?? 0)) ?></b> once admin approves.</div>
+        <?php else: ?>
+          <b>🧧 Red Envelope ready</b>
+          <div class="small muted">
+            Your discount will be calculated from your deposit amount. Deposit an amount that matches a package price
+            <?php
+              $__pkgList = [];
+              if (class_exists('TaskPackage')) {
+                  $__map = red_envelope_discounts();
+                  foreach (TaskPackage::active() as $__p) {
+                      $__d = (float)($__map[(string)$__p['id']] ?? $__map[$__p['id']] ?? 0);
+                      if ($__d > 0) $__pkgList[] = 'Rs '.number_format((float)$__p['price']).' → '.money($__d).' off';
+                  }
+              }
+              if ($__pkgList) echo '('. e(implode(' · ', array_slice($__pkgList, 0, 6))) .')';
+            ?>
+            to unlock the discount automatically.
+          </div>
+        <?php endif; ?>
       </div>
     </div>
   <?php endif; ?>

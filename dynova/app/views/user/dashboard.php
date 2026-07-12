@@ -195,6 +195,10 @@ if ($reOn):
 
 <?php if ($reReady && empty($_SESSION['re_popup_seen'])):
     $_SESSION['re_popup_seen'] = 1;
+    // Show the range on the popup (or a single amount if only one is configured)
+    $popupLbl = red_envelope_min_amount() > 0 && red_envelope_min_amount() !== red_envelope_max_amount()
+        ? 'Rs ' . number_format(red_envelope_min_amount()) . ' – Rs ' . number_format(red_envelope_max_amount())
+        : 'Rs ' . number_format(red_envelope_max_amount());
 ?>
 <!-- Fresh-claim popup, rendered ONCE per session right after claiming -->
 <div class="re-popup-backdrop" id="rePopup" data-testid="re-popup">
@@ -203,12 +207,12 @@ if ($reOn):
       <i class="fa-solid fa-xmark"></i>
     </button>
     <div class="celebrate">🎉</div>
-    <h3>Congratulations! You've unlocked</h3>
-    <div class="re-amount" data-testid="re-popup-amount">Rs <?= number_format((float)$reClaim['amount']) ?></div>
-    <p>discount on your next deposit!</p>
+    <h3>Congratulations! You've unlocked a discount!</h3>
+    <div class="re-amount" data-testid="re-popup-amount"><?= e($popupLbl) ?></div>
+    <p>Your discount will be calculated based on your <b>deposit amount</b>.</p>
     <p style="opacity:.75;margin-top:10px">
-      This discount will be applied <b style="color:#fff">automatically</b> when you make your next deposit.
-      Your wallet will still receive the full deposit amount.
+      Each package tier has its own discount. When you deposit, we'll automatically apply the discount that matches the amount.
+      Your wallet will still receive the <b>full deposit amount</b>.
     </p>
     <a href="<?= route_url('wallet/deposit') ?>" class="re-cta" data-testid="re-popup-deposit-cta">
       <i class="fa-solid fa-wallet"></i> Proceed to Deposit
@@ -295,31 +299,32 @@ $activePkg = TaskPackage::activeForUser((int)$u['id']);
 
 <?php
 // ------------------------------------------------------------------
-// 🧧 Red Envelope — coupon voucher (v2.1 per-package).
-//   Headline copy depends on the user's current package:
-//    - none active         → "Get up to Rs X off on your first package!"
-//    - has active package  → "Get Rs Y off when you upgrade to <next>!"
+// 🧧 Red Envelope — coupon voucher (v2.2 dynamic per-package).
+//   Coupon shows a RANGE of possible savings.  The exact discount is
+//   determined at deposit time based on which package price the user
+//   deposits for (e.g. Rs 10,000 → Rs 700, Rs 15,000 → Rs 1,500).
 // ------------------------------------------------------------------
 $reOn       = red_envelope_enabled();
 $reClaim    = $reOn ? RedEnvelope::activeClaim((int)$u['id']) : null;
 $reEver     = $reOn ? RedEnvelope::hasEverClaimed((int)$u['id']) : false;
-[$reTargetAmt, $reTargetPkgId, $reTargetName, $reIsUpgrade] =
-    $reOn ? red_envelope_target_for_user((int)$u['id']) : [0.0, 0, '', false];
-$reCanClaim = $reOn && !$reEver && $reTargetAmt > 0;    // never claimed yet
-$reReady    = $reClaim !== null;                          // has an active claim
+$reMax      = $reOn ? red_envelope_max_amount() : 0.0;
+$reMin      = $reOn ? red_envelope_min_amount() : 0.0;
+$reCanClaim = $reOn && !$reEver && $reMax > 0;
+$reReady    = $reClaim !== null;
 if ($reOn && ($reCanClaim || $reReady)):
-    $rePreviewAmt = $reReady ? (float)$reClaim['amount'] : (float)$reTargetAmt;
-
-    // Headline strings
+    // Copy strings — differ for the "range" preview vs the post-claim state.
     if ($reReady) {
-        $reHeadline = 'SAVE';
-        $reNote     = 'Applied automatically on your next deposit.';
-    } elseif ($reIsUpgrade) {
-        $reHeadline = 'UPGRADE BONUS';
-        $reNote     = 'Get Rs '.number_format($rePreviewAmt).' off when you upgrade to '.($reTargetName ?: 'the next tier').'.';
+        $reHeadline = 'DISCOUNT UNLOCKED';
+        $reAmountLbl = ($reMin > 0 && $reMin !== $reMax)
+            ? 'Rs ' . number_format($reMin) . ' – Rs ' . number_format($reMax)
+            : 'Rs ' . number_format($reMax);
+        $reNote  = 'Discount is calculated from your deposit amount and applied automatically.';
     } else {
         $reHeadline = 'DISCOUNT VOUCHER';
-        $reNote     = 'Up to Rs '.number_format($rePreviewAmt).' off on your first package.';
+        $reAmountLbl = ($reMin > 0 && $reMin !== $reMax)
+            ? 'Rs ' . number_format($reMin) . ' – Rs ' . number_format($reMax) . ' OFF!'
+            : 'Rs ' . number_format($reMax) . ' OFF!';
+        $reNote  = 'The exact discount depends on your deposit amount.';
     }
 ?>
 <div class="dash-hero" data-testid="dash-hero-grid">
@@ -337,14 +342,15 @@ if ($reOn && ($reCanClaim || $reReady)):
   <!-- Coupon voucher — sits beside the balance card on desktop -->
   <div class="coupon-wrap" data-testid="red-envelope-card"
        data-state="<?= $reReady ? 'ready' : 'unclaimed' ?>"
-       data-amount="<?= number_format($rePreviewAmt, 0, '.', '') ?>">
+       data-range-min="<?= (int)$reMin ?>"
+       data-range-max="<?= (int)$reMax ?>">
     <div class="coupon">
       <div class="coupon-stub"><span class="coupon-stub-text">COUPON</span></div>
       <div class="coupon-dashed"></div>
       <div class="coupon-body">
         <div class="coupon-kicker"><i class="fa-solid fa-gift"></i> Red Envelope</div>
         <div class="coupon-headline"><?= e($reHeadline) ?></div>
-        <div class="coupon-save">SAVE <span class="coupon-amt">Rs <?= number_format($rePreviewAmt) ?></span></div>
+        <div class="coupon-save"><span class="coupon-amt"><?= e($reAmountLbl) ?></span></div>
         <div class="coupon-note"><?= e($reNote) ?></div>
         <?php if ($reReady): ?>
           <a href="<?= route_url('wallet/deposit') ?>" class="coupon-btn" data-testid="re-proceed-deposit">
