@@ -89,8 +89,18 @@ class RedEnvelope
 
         // Determine the surprise amount — random pick from all configured
         // non-zero package amounts (this is the "surprise" gift).
+        // Defensive fallback: if the helper is missing on an older deploy
+        // where /app/helpers.php was not re-uploaded, pick inline from the
+        // same source so the CLAIM button never 500s.
         if ($amount === null || $amount <= 0) {
-            $amount = red_envelope_pick_bonus_amount();
+            if (function_exists('red_envelope_pick_bonus_amount')) {
+                $amount = red_envelope_pick_bonus_amount();
+            } else {
+                $raw  = (string)(function_exists('setting') ? setting('red_envelope_discounts', '') : '');
+                $map  = $raw ? (json_decode($raw, true) ?: []) : [];
+                $vals = array_values(array_filter(array_map('floatval', $map), fn($v) => $v > 0));
+                $amount = $vals ? (float)$vals[array_rand($vals)] : 0.0;
+            }
         }
         if ($amount <= 0) return null;
 
