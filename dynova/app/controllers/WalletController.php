@@ -64,6 +64,21 @@ class WalletController {
                 if ($amount < 100)  $errors[] = 'Minimum deposit is Rs 100.';
                 if (!$chosen)       $errors[] = 'Please select a payment method.';
 
+                // Upgrade mode → amount must exactly equal the price
+                // difference between the current package and the target.
+                $pendingPid = (int)($_SESSION['pending_upgrade_to'] ?? 0);
+                if ($pendingPid > 0) {
+                    $active = TaskPackage::activeForUser((int)$u['id']);
+                    $target = TaskPackage::find($pendingPid);
+                    if ($active && $target) {
+                        $need = (float)$target['price'] - (float)$active['price_paid'];
+                        if (abs($amount - $need) > 0.001) {
+                            if ($amount < $need)  $errors[] = 'You must pay the full difference of ' . money($need) . ' to upgrade.';
+                            else                  $errors[] = 'You only need to pay ' . money($need) . '.';
+                        }
+                    }
+                }
+
                 if (!$errors) {
                     $_SESSION['dep_wizard'] = [
                         'amount'    => $amount,
@@ -121,17 +136,8 @@ class WalletController {
                         'transaction_id' => $txid,
                         'sender_account' => $sender,
                         'screenshot'     => $screenshotPath,
-                        // 🧧 Red Envelope: attach the currently-active claim
-                        //    so admin approval credits the FULL amount but
-                        //    the user only paid (amount - envelope_used).
-                        'envelope_used'  => (float)($wizard['envelope'] ?? 0),
+                        'envelope_used'  => 0.0,
                     ]);
-                    // Close the claim now so the user cannot double-spend it
-                    // on multiple simultaneous deposit requests.
-                    $claimId = (int)($wizard['envelope_claim_id'] ?? 0);
-                    if ($claimId > 0 && !empty($wizard['envelope'])) {
-                        RedEnvelope::markUsed($claimId, $depId);
-                    }
                     unset($_SESSION['dep_wizard']);
                     flash_set('success', 'Deposit request submitted. Pending admin approval.');
                     redirect('wallet');
@@ -144,21 +150,39 @@ class WalletController {
             redirect('wallet/deposit', ['step' => 1]);
         }
 
-        // 🧧 Red Envelope — v2.2: the discount is looked up FRESH at
-        //    deposit time based on the deposit amount matching a
-        //    package's list price.  The claim table is used only as an
-        //    eligibility flag (one-time-per-user unlock).
-        $envelopeClaim = RedEnvelope::activeClaim((int)$u['id']);
+        // v3: Red Envelope no longer discounts deposits — it credits the
+        // wallet directly on CLAIM.  These variables stay for view
+        // compatibility but are always zero for deposits.
+        $envelopeClaim = null;
         $envelopeAmt   = 0.0;
         $envelopeName  = '';
-        if ($envelopeClaim && !empty($wizard['amount'])) {
-            [$envelopeAmt, $envelopeName] = red_envelope_discount_for_amount((float)$wizard['amount']);
-            $_SESSION['dep_wizard']['envelope']          = $envelopeAmt;
-            $_SESSION['dep_wizard']['envelope_claim_id'] = (int)$envelopeClaim['id'];
-            $wizard = $_SESSION['dep_wizard'];
+        $payAmount     = (float)($wizard['amount'] ?? 0);
+
+        // ---- Package upgrade context (session-driven from Packages page) ----
+        $upgradeCtx = null;
+        $pendingPid = (int)($_SESSION['pending_upgrade_to'] ?? 0);
+        if ($pendingPid > 0) {
+            $active = TaskPackage::activeForUser((int)$u['id']);
+            $target = TaskPackage::find($pendingPid);
+            if ($active && $target && (float)$target['price'] > (float)$active['price_paid']) {
+                $diff = (float)$target['price'] - (float)$active['price_paid'];
+                $upgradeCtx = [
+                    'from_name'  => $active['pkg_name'] ?? 'Current',
+                    'from_price' => (float)$active['price_paid'],
+                    'to_name'    => (string)$target['name'],
+                    'to_price'   => (float)$target['price'],
+                    'diff'       => $diff,
+                ];
+                // Pre-fill the wizard amount with the exact difference so
+                // step-1 shows the correct number immediately.
+                if (empty($wizard['amount'])) {
+                    $_SESSION['dep_wizard'] = $wizard = array_merge($wizard ?? [], ['amount' => $diff]);
+                }
+            } else {
+                // No longer applicable → clear the intent
+                unset($_SESSION['pending_upgrade_to']);
+            }
         }
-        // Effective amount user actually pays for this deposit.
-        $payAmount = max(0.0, (float)($wizard['amount'] ?? 0) - $envelopeAmt);
 
         // Look up the selected method for steps 2/3.  We prefer the stored
         // method_id (stable across renames / re-orders); fall back to a
@@ -186,7 +210,7 @@ class WalletController {
         }
 
         $history = Deposit::forUser((int)$u['id']);
-        view('user/deposit', compact('u','methods','errors','history','step','wizard','selected','envelopeClaim','envelopeAmt','envelopeName','payAmount'), 'app');
+        view('user/deposit', compact('u','methods','errors','history','step','wizard','selected','envelopeClaim','envelopeAmt','envelopeName','payAmount','upgradeCtx'), 'app');
     }
 
     public function withdraw(): void {
@@ -211,6 +235,20 @@ class WalletController {
         $slabs      = $ladderInfo['ladder'];          // ordered int[] e.g. [1500,7000,15000,...]
         $minSlab    = $slabs ? (float)$slabs[0] : 0.0;
 
+        // Once-per-24-hours lock. Compute lockedUntil so the view can render
+        // a live countdown + disable the fields.
+        $lockRow = db()->prepare(
+            'SELECT created_at FROM withdrawals WHERE user_id=? ORDER BY id DESC LIMIT 1'
+        );
+        $lockRow->execute([(int)$u['id']]);
+        $lastAt = $lockRow->fetchColumn();
+        $lockedUntilTs = 0;
+        if ($lastAt) {
+            $lockUntil = strtotime($lastAt) + 86400;
+            if ($lockUntil > time()) $lockedUntilTs = $lockUntil;
+        }
+        $isLocked = $lockedUntilTs > 0;
+
         $errors = [];
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $amount = (float)($_POST['amount'] ?? 0);
@@ -231,17 +269,26 @@ class WalletController {
                 $errors[] = 'Insufficient balance for the selected amount.';
             }
 
-            // Once-per-day rule: users may only submit ONE withdrawal
-            // request per calendar day (server time).  Prevents spam and
-            // gives operators a clear 24-hour cadence.
+            // Once-per-24-hours rule: users may submit at most ONE
+            // withdrawal every 24 hours (rolling window).  Second attempt
+            // is rejected with a friendly "try again in X hours Y minutes"
+            // message so the user knows exactly when they can retry.
             if (!$errors) {
-                $todayCountStmt = db()->prepare(
-                    'SELECT COUNT(*) FROM withdrawals
-                      WHERE user_id = ? AND DATE(created_at) = CURDATE()'
+                $last = db()->prepare(
+                    'SELECT created_at FROM withdrawals WHERE user_id=? ORDER BY id DESC LIMIT 1'
                 );
-                $todayCountStmt->execute([(int)$u['id']]);
-                if ((int)$todayCountStmt->fetchColumn() > 0) {
-                    $errors[] = 'You have already submitted a withdrawal today. Please try again tomorrow.';
+                $last->execute([(int)$u['id']]);
+                $lastAt = $last->fetchColumn();
+                if ($lastAt) {
+                    $unlockAt = strtotime($lastAt) + 86400;
+                    $rem = $unlockAt - time();
+                    if ($rem > 0) {
+                        $h = floor($rem / 3600);
+                        $m = floor(($rem % 3600) / 60);
+                        $errors[] = 'You can only withdraw once per 24 hours. Please try again in '
+                                  . ($h > 0 ? $h . ' hour' . ($h === 1 ? '' : 's') . ' ' : '')
+                                  . $m . ' minute' . ($m === 1 ? '' : 's') . '.';
+                    }
                 }
             }
             if (!$method) $errors[] = 'Please select a payment method.';
@@ -263,6 +310,6 @@ class WalletController {
             }
         }
         $history = Withdrawal::forUser((int)$u['id']);
-        view('user/withdraw', compact('u','methods','errors','history','slabs','minSlab'), 'app');
+        view('user/withdraw', compact('u','methods','errors','history','slabs','minSlab','lockedUntilTs','isLocked'), 'app');
     }
 }

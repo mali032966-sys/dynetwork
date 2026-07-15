@@ -75,13 +75,13 @@ try {
         case $route === 'wallet/deposit':
             (new WalletController())->deposit(); break;
         case $route === 'wallet/red-envelope-claim':
-            // 🧧 User taps CLAIM on the dashboard coupon → grant a claim
-            //    using the amount that matches their next action:
-            //     - no active package → highest configured amount
-            //     - active package    → discount for the next-tier package
+            // 🧧 Only users with an ACTIVE package can claim.
             $u = require_user();
-            [$amt] = red_envelope_target_for_user((int)$u['id']);
-            RedEnvelope::claim((int)$u['id'], $amt > 0 ? $amt : null);
+            if (!TaskPackage::activeForUser((int)$u['id'])) {
+                flash_set('error', 'Activate a package first to unlock your Red Envelope.');
+                redirect('packages');
+            }
+            RedEnvelope::claim((int)$u['id']);
             unset($_SESSION['re_popup_seen']);
             redirect('dashboard');
             break;

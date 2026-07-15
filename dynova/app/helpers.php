@@ -202,6 +202,16 @@ function red_envelope_target_for_user(int $uid): array {
     return [$amt, (int)$next['id'], (string)$next['name'], true];
 }
 
+/** Pick a random amount from the pool of configured, non-zero per-package
+ *  discount amounts.  Returns 0 if the feature is disabled or nothing
+ *  configured.  Used at CLAIM time to reveal a "surprise" bonus. */
+function red_envelope_pick_bonus_amount(): float {
+    if (!red_envelope_enabled()) return 0.0;
+    $vals = array_values(array_filter(array_map('floatval', red_envelope_discounts()), fn($v) => $v > 0));
+    if (!$vals) return 0.0;
+    return (float) $vals[array_rand($vals)];
+}
+
 /**
  * Look up the discount that applies when a user requests a deposit
  * of `$amount`.  The rule: deposit amount must EXACTLY equal the list

@@ -28,17 +28,38 @@ class PackageController {
 
             if ($action === 'upgrade') {
                 $pid = (int) ($_POST['package_id'] ?? 0);
-                $res = TaskPackage::upgrade((int) $u['id'], $pid);
-                if ($res['ok']) {
-                    $msg = 'Package upgraded! You paid ' . money($res['cost']) . ' (difference).';
-                    if (!empty($res['discount']) && $res['discount'] > 0) {
-                        $msg .= ' 🧧 Red Envelope discount: ' . money($res['discount']) . '.';
-                    }
-                    flash_set('success', $msg);
-                } else {
-                    flash_set('error', $res['error'] ?? 'Upgrade failed.');
+                // NEW FLOW: don't run the upgrade here. Divert the user
+                // to the Deposit page with the pre-computed price
+                // difference so they can top-up their wallet first.
+                // The actual upgrade is auto-run when the deposit is
+                // approved (see WalletController + Admin approval).
+                $active = TaskPackage::activeForUser((int)$u['id']);
+                $target = TaskPackage::find($pid);
+                if (!$active || !$target) {
+                    flash_set('error', 'Upgrade not available right now.');
+                    redirect('packages');
                 }
-                redirect('packages');
+                if ((float)$target['price'] <= (float)$active['price_paid']) {
+                    flash_set('error', 'You can only upgrade to a higher-priced package.');
+                    redirect('packages');
+                }
+                $need = (float)$target['price'] - (float)$active['price_paid'];
+                // If the user already has enough balance, run the upgrade immediately.
+                if ((float)$u['balance'] >= $need) {
+                    $res = TaskPackage::upgrade((int)$u['id'], $pid);
+                    if ($res['ok']) {
+                        unset($_SESSION['pending_upgrade_to']);
+                        flash_set('success', 'Package upgraded! You paid ' . money($res['cost']) . '.');
+                    } else {
+                        flash_set('error',   $res['error'] ?? 'Upgrade failed.');
+                    }
+                    redirect('packages');
+                }
+                // Otherwise route to the Deposit page with the intent
+                // stored in the session (see WalletController::deposit).
+                $_SESSION['pending_upgrade_to'] = $pid;
+                flash_set('success', 'Deposit ' . money($need) . ' to complete your upgrade to ' . $target['name'] . '.');
+                redirect('wallet/deposit');
             }
 
             if ($action === 'open_envelope') {

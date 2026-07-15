@@ -21,6 +21,48 @@ $rePicked  = (float)($_SESSION['red_envelope_picked'] ?? 0);
   </a>
 </div>
 
+<?php
+// Persistent "you started an upgrade" nudge — appears after the user
+// diverted to the deposit page (session var set by PackageController).
+$pendingUpgradeId = (int)($_SESSION['pending_upgrade_to'] ?? 0);
+$pendingUpgrade   = $pendingUpgradeId ? TaskPackage::find($pendingUpgradeId) : null;
+if ($pendingUpgrade && $active):
+    $__diff = (float)$pendingUpgrade['price'] - (float)$active['price_paid'];
+    $__canFinish = (float)$u['balance'] >= $__diff && $__diff > 0;
+?>
+<div class="card stagger" style="border:1px solid rgba(255,181,71,.4);
+     background:linear-gradient(120deg,rgba(255,181,71,.10),rgba(255,91,106,.06));
+     padding:14px 16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center"
+     data-testid="pkg-pending-upgrade">
+  <div style="width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:rgba(255,181,71,.18);color:#ffb547;font-size:18px;flex-shrink:0">
+    <i class="fa-solid fa-arrows-up-to-line"></i>
+  </div>
+  <div style="flex:1;min-width:220px">
+    <b>Upgrade in progress → <?= e($pendingUpgrade['name']) ?></b>
+    <div class="small muted" style="margin-top:2px">
+      Difference required: <b style="color:#ffd54a"><?= money($__diff) ?></b>.
+      <?= $__canFinish
+          ? 'Your wallet has enough balance — click below to complete the upgrade.'
+          : 'Deposit the exact difference to complete this upgrade.' ?>
+    </div>
+  </div>
+  <?php if ($__canFinish): ?>
+    <form method="post" style="margin:0">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="upgrade">
+      <input type="hidden" name="package_id" value="<?= (int)$pendingUpgrade['id'] ?>">
+      <button class="btn" data-testid="pkg-finish-upgrade" style="background:linear-gradient(120deg,#ffb547,#ff5b6a);color:#08111a;font-weight:800">
+        <i class="fa-solid fa-check"></i> Complete Upgrade
+      </button>
+    </form>
+  <?php else: ?>
+    <a href="<?= route_url('wallet/deposit') ?>" class="btn" data-testid="pkg-finish-deposit">
+      <i class="fa-solid fa-wallet"></i> Deposit <?= money($__diff) ?>
+    </a>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <?php if ($active): ?>
   <div class="card active-pkg-card stagger" data-testid="active-package">
     <div class="active-pkg-body" style="padding:18px 20px">

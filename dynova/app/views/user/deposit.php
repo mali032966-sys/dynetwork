@@ -26,7 +26,37 @@
 <?php if ($step === 1): ?>
   <!-- =================== STEP 1: amount + method =================== -->
 
-  <?php if (!empty($envelopeClaim)): ?>
+  <?php if (!empty($upgradeCtx)): ?>
+    <div class="card stagger" data-testid="deposit-upgrade-banner" style="
+         padding:16px 18px; border:1px solid rgba(255,91,106,.45);
+         background:linear-gradient(120deg,rgba(255,91,106,.10),rgba(255,181,71,.06));">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:rgba(255,91,106,.20);color:#ff8a95;font-size:16px">
+          <i class="fa-solid fa-arrows-up-to-line"></i>
+        </div>
+        <b style="font-size:15px">Package Upgrade — Pay the difference</b>
+      </div>
+      <div class="upgrade-summary">
+        <div class="upgrade-row">
+          <span class="lbl">Current Package</span>
+          <b><?= e($upgradeCtx['from_name']) ?> — <?= money($upgradeCtx['from_price']) ?></b>
+        </div>
+        <div class="upgrade-row">
+          <span class="lbl">Upgrading to</span>
+          <b><?= e($upgradeCtx['to_name']) ?> — <?= money($upgradeCtx['to_price']) ?></b>
+        </div>
+        <div class="upgrade-row big">
+          <span class="lbl">🔴 Difference to Pay</span>
+          <b><?= money($upgradeCtx['diff']) ?></b>
+        </div>
+        <div class="small muted" style="margin-top:6px">
+          You must pay <b style="color:#ffd54a">exactly <?= money($upgradeCtx['diff']) ?></b>. Once the deposit is approved you'll be able to activate the upgrade from the Packages page.
+        </div>
+      </div>
+    </div>
+  <?php endif; ?>
+
+  <?php if (!empty($envelopeClaim) && (float)$envelopeAmt > 0): ?>
     <div class="card stagger re-banner" data-testid="deposit-re-banner">
       <div class="re-banner-ic"><i class="fa-solid fa-gift"></i></div>
       <div class="re-banner-body">
@@ -63,11 +93,18 @@
     <div class="small muted" style="margin-bottom:14px">How much would you like to deposit?</div>
 
     <div class="form-group">
-      <label>Amount (PKR)</label>
+      <label>Amount (PKR)<?= !empty($upgradeCtx) ? ' <span class="small" style="color:#ff8a95">— locked to upgrade difference</span>' : '' ?></label>
       <input class="input" type="number" name="amount" min="100" step="1"
              placeholder="e.g. 1000"
-             value="<?= e($wizard['amount'] ?? '') ?>" required
+             value="<?= e($wizard['amount'] ?? (!empty($upgradeCtx) ? (int)$upgradeCtx['diff'] : '')) ?>"
+             required
+             <?= !empty($upgradeCtx) ? 'readonly style="background:rgba(255,91,106,.08);border-color:rgba(255,91,106,.35);cursor:not-allowed"' : '' ?>
              data-testid="deposit-amount" autofocus>
+      <?php if (!empty($upgradeCtx)): ?>
+        <div class="small muted" style="margin-top:6px;color:#ff8a95">
+          <i class="fa-solid fa-lock"></i> Amount is fixed to the exact difference required for your upgrade.
+        </div>
+      <?php endif; ?>
     </div>
 
     <div class="form-group">
@@ -318,4 +355,16 @@
 @media (max-width:520px){
   .re-summary-row.big b{ font-size:18px; }
 }
+/* Upgrade summary rows on Step 1 */
+.upgrade-summary{ display:flex; flex-direction:column; gap:6px; }
+.upgrade-row{
+  display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+  padding:6px 0; font-size:13.5px; color:var(--txt-mute,#cbd5e1);
+}
+.upgrade-row + .upgrade-row{ border-top:1px solid rgba(255,255,255,.05); }
+.upgrade-row .lbl{ opacity:.9; }
+.upgrade-row b{ color:#fff; font-size:14px; }
+.upgrade-row.big{ font-size:15px; padding-top:10px; }
+.upgrade-row.big .lbl{ color:#ff8a95; font-weight:600; }
+.upgrade-row.big b{ font-size:22px; color:#ffd54a; }
 </style>

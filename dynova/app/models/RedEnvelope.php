@@ -71,27 +71,52 @@ class RedEnvelope
     }
 
     /**
-     * Try to grant a new claim to a user.  Returns the claim row on
-     * success, null if the user is not eligible.
+     * Try to grant a new claim to a user and INSTANTLY credit the
+     * bonus amount into their wallet balance.  Returns the claim row
+     * on success (with the awarded amount), or null if the user is
+     * ineligible.
      *
-     * v2.2: the claim is a pure ELIGIBILITY flag — the actual discount
-     * amount is computed at DEPOSIT time based on which package price
-     * the user requests.  Passing `$amount` is still supported for
-     * back-compat (used by admin "Issue new envelope" so the history
-     * shows a promised amount), but the deposit flow re-computes.
+     * v3 (2026-07-14): the envelope is a BONUS, not a discount.  The
+     * amount is picked randomly from the admin-configured pool and
+     * immediately credited to `users.balance` + logged as a normal
+     * transaction so the user can withdraw it via the standard rules.
      */
     public static function claim(int $uid, ?float $amount = null): ?array
     {
         self::ensureSchema();
         if (!red_envelope_enabled())        return null;
         if (self::hasEverClaimed($uid))     return self::activeClaim($uid); // idempotent
-        // Grant only if the feature has SOMETHING configured — otherwise
-        // the coupon would be a promise we can't fulfil.
-        if (red_envelope_max_amount() <= 0) return null;
-        $stored = ($amount !== null && $amount > 0) ? $amount : 0.0;
-        db()->prepare("INSERT INTO red_envelope_claims (user_id, amount) VALUES (?, ?)")
-            ->execute([$uid, $stored]);
-        return self::activeClaim($uid);
+
+        // Determine the surprise amount — random pick from all configured
+        // non-zero package amounts (this is the "surprise" gift).
+        if ($amount === null || $amount <= 0) {
+            $amount = red_envelope_pick_bonus_amount();
+        }
+        if ($amount <= 0) return null;
+
+        // Credit + record in a single transaction so we never partially apply.
+        $pdo = db();
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare("INSERT INTO red_envelope_claims (user_id, amount, status, used_at) VALUES (?, ?, 'used', NOW())")
+                ->execute([$uid, $amount]);
+            $claimId = (int)$pdo->lastInsertId();
+            // Add the bonus to the wallet immediately
+            User::addBalance($uid, $amount, 'balance');
+            Transaction::log(
+                $uid, 'admin_adjust', $amount,
+                '🧧 Red Envelope bonus (one-time gift)'
+            );
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            return null;
+        }
+        // Fetch the row we just inserted
+        $s = $pdo->prepare('SELECT * FROM red_envelope_claims WHERE id = ?');
+        $s->execute([$claimId]);
+        $row = $s->fetch();
+        return $row ?: null;
     }
 
     /** Attach + close a claim against a specific deposit id. */
